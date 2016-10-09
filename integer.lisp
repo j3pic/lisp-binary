@@ -1,0 +1,269 @@
+(defpackage :lisp-binary/integer
+  (:use :common-lisp :lisp-binary-utils)
+  (:export :get-lsb-byte :encode-lsb :decode-lsb :encode-msb
+	   :signed->unsigned :unsigned->signed :unsigned->signed/bits
+	   :signed->unsigned/bits 
+	   :read-integer :read-bytes :write-bytes :pop-bits
+	   :split-bit-field :join-field-bits :pop-bits/le
+	   :push-bits :push-bits/le :bit-stream))
+
+(in-package :lisp-binary/integer)
+
+(declaim (optimize (debug 0) (speed 3)))
+
+
+(defun get-lsb-byte (number byte)
+  (declare (type integer number)
+	   (type (signed-byte 32) byte))
+  (logand #xff (ash number (* byte -8))))
+
+(defun encode-lsb (number bytes)
+  (declare (type integer number))
+  (let ((result (make-array (list bytes) :element-type '(unsigned-byte 8))))
+   (loop for x from 0 below bytes
+      do (setf (aref result x) (get-lsb-byte number x)))
+   result))
+
+(declaim (inline encode-lsb))
+
+(defun decode-lsb (bytes)
+;;  (declare (type (simple-array (unsigned-byte 8) (*)) bytes))
+  (let ((result 0))
+    (declare (type integer result))
+    (loop for b across bytes
+	  for ix from 0 do
+	 (setf result (logior result (ash b (* ix 8)))))
+    result))
+
+(declaim (inline decode-lsb))
+
+(defun  decode-msb (bytes)
+  (decode-lsb  (reverse bytes)))
+
+(declaim (inline decode-msb))
+
+(defun encode-msb (number bytes)
+  (declare (type integer number))
+  (reverse (encode-lsb number bytes)))
+(declaim (inline encode-msb))
+
+(defun signed->unsigned/bits (n bits)
+  (let ((negative-offset (expt 2 bits)))
+    (if (< n 0)
+	(the integer (+ n negative-offset))
+	n)))
+
+(defun signed->unsigned (n bytes)
+  (signed->unsigned/bits n (* 8 bytes)))
+
+(defun unsigned->signed/bits (n bits)
+  (let* ((negative-offset (expt 2 bits))
+	 (max (- (/ negative-offset 2) 1)))
+    (if (> n max)
+	(- n negative-offset)
+	n)))
+
+(defun unsigned->signed (n bytes)
+  (unsigned->signed/bits n (* 8 bytes)))
+
+(defgeneric write-bytes (buffer stream &optional bytes)
+  (:documentation "Write BYTES bytes of the BUFFER into the STREAM. If
+BYTES is not provided, then the whole BUFFER is written.
+
+For some types of stream, it is legal to use a fractional number for BYTES. In that case,
+the whole bytes are written first, and then the leftover bits. The leftover bits must be given
+their own byte at the end of the BUFFER. WRITE-BYTES assumes that all bytes are 8 bits long,
+so to write 4 bits, you would give 1/2 as the value of BYTES.
+
+NOTE: If you're using this with a bit-stream created with WRAP-IN-BIT-STREAM, the
+:BYTE-ORDER given to that function should match the one given to this function."))
+
+(defmethod write-bytes (buffer stream &optional bytes)
+  (setf bytes (or bytes (length buffer)))
+  (check-type bytes integer)
+  (write-sequence buffer stream :end bytes)
+  (length buffer))
+
+(defgeneric read-bytes (n stream &key element-type)
+  (:documentation "Read N bytes of type ELEMENT-TYPE from STREAM and return them in a newly-allocated array.
+
+Returns two values: The array containing the bytes, and the number of bytes read.
+
+For some types of stream, it is legal to use a fractional number for N. In that case,
+the whole bytes are read first, and then the leftover bits. The leftover bits are given
+their own byte at the end of the returned array. The second return value (# of bytes read)
+will also be fractional in this case. The fractional part can be used to calculate
+how many bits the partial byte represents.
+
+If you're using 8-bit bytes and want to read 11 bits (a whole byte plus three bits), give
+11/8 as the value of N.
+
+
+NOTE: If you're using this with a bit-stream created with WRAP-IN-BIT-STREAM, the :BYTE-ORDER given
+to that function should match the one given to this function."))
+
+(defmethod read-bytes (n stream &key (element-type '(unsigned-byte 8)))
+  (let ((result (make-array n :element-type element-type)))
+    (values result (read-sequence result stream))))
+	       
+(defun read-integer (length stream &key (byte-order :little-endian) signed)
+  (multiple-value-bind (bytes bytes-read) (read-bytes length stream)
+    (let ((bytes (if (integerp bytes-read)
+		     bytes
+		     (subseq bytes 0 (1- (length bytes)))))
+	  (partial-byte (unless (integerp bytes-read)
+			  (aref bytes (1- (length bytes)))))
+	  (extra-bits (multiple-value-bind (whole frac) (floor bytes-read)
+			(declare (ignore whole))
+			     (* frac 8))))
+      (labels ((add-extra-bits (int)
+		 (if partial-byte
+		     (ecase byte-order
+		       (:big-endian
+			(logior
+			 (ash int extra-bits)
+			 partial-byte))
+		       (:little-endian
+			(logior
+			 (ash partial-byte (* (floor length) 8))
+			 int)))
+		     int))		       
+	       (decode-msb* (bytes)
+		 (add-extra-bits
+		  (decode-msb bytes)))
+	       (decode-lsb* (bytes)
+		 (add-extra-bits
+		  (decode-lsb bytes))))
+	(declare (inline add-extra-bits decode-msb* decode-lsb*))
+	(values
+	 (let ((result (case byte-order
+			 ((:big-endian) (decode-msb* bytes))
+			 ((:little-endian) (decode-lsb* bytes))
+			 (otherwise (error "Invalid byte order: ~a" byte-order)))))
+	   (if signed
+	       (unsigned->signed result length)
+	       result))
+	 bytes-read)))))
+
+
+(defun split-bit-field (integer field-bits &optional field-signedness)
+  "Given the INTEGER, split it up as a bit field. The sizes and number of elements are given
+by the FIELD-BITS parameter. If FIELD-SIGNEDNESS is specified, then it must be a list
+that contains NIL for each element that will be interpreted as an unsigned integer,
+and non-NIL for signed integers.
+
+Example:
+
+    CL-USER> (split-bit-field #xffaaff '(8 8 8))
+    255
+    170
+    255
+    CL-USER>
+
+Better performance could be acheived if INTEGER could be a FIXNUM, but it can't.
+"
+  (declare (type integer integer)
+	   (type list field-bits))
+  (setf field-signedness (reverse field-signedness))
+  (apply #'values
+	 (reverse (loop for bits of-type (unsigned-byte 29) in (reverse field-bits) 
+		     for mask = (- (the fixnum (ash 1 bits)) 
+				   (the fixnum 1))
+		       for signed = (pop field-signedness)
+		     collect (let ((unsigned-result (logand mask integer)))
+			       (if signed
+				   (unsigned->signed/bits unsigned-result bits)
+				   unsigned-result))
+		       do (setf integer (ash integer (- bits)))))))
+
+(defun join-field-bits (field-bits field-signedness field-values)
+  (let ((result 0))
+    (loop for (nil next-bits . rest-bits) 
+       on field-bits
+       for value in field-values
+       for signed = (pop field-signedness)
+       do
+	  (setf result
+		(logior result
+			(if signed
+			    (signed->unsigned value)
+			    value)))
+	 (when next-bits
+	   (setf result (ash result next-bits))))
+    result))
+
+(defmacro push-bits (n integer-size integer-place)
+  "Pushes N onto the front of INTEGER-PLACE,
+the 'front' being defined as the MOST significant bits. The
+INTEGER-SIZE specifies how many bits are already in the
+INTEGER-PLACE."
+  (multiple-value-bind (dummies vals newval setter getter)
+      (get-setf-expansion integer-place)
+    (let ((old-value (gensym))
+	  (integer-size-temp (gensym)))
+      `(let* (,@(mapcar #'list dummies vals)
+              (,old-value ,getter)
+		(,integer-size-temp ,integer-size)
+		(,(car newval) (+ ,old-value (ash ,n ,integer-size-temp)))
+		,@(cdr newval))
+         ,setter))))
+
+(defmacro push-bits/le (n n-bits integer-place)
+  "Pushes N-BITS bits from N onto the front of INTEGER-PLACE,
+the 'front' being defined as the LEAST significant bits. The
+INTEGER-SIZE specifies how many bits are already in the
+INTEGER-PLACE."
+  (multiple-value-bind (dummies vals newval setter getter)
+      (get-setf-expansion integer-place)
+    (let ((old-value (gensym))
+	  (n-ones (gensym))
+	  (n-bits-temp (gensym)))
+      `(let* (,@(mapcar #'list dummies vals)
+              (,old-value ,getter)
+		(,n-bits-temp ,n-bits)
+		(,n-ones (1- (ash 1 ,n-bits-temp)))
+		(,(car newval) (+ (ash ,old-value ,n-bits-temp) (logand ,n ,n-ones)))
+		,@(cdr newval))
+         ,setter))))
+	       
+
+(defmacro pop-bits (n-bits integer-size integer-place)
+  "Pops the N most significant bits off the front of the INTEGER-PLACE and returns it.
+INTEGER-SIZE is the number of unpopped bits in the integer."
+  (multiple-value-bind (dummies vals newval setter getter)
+      (get-setf-expansion integer-place)
+    (let ((old-value (gensym "OLD-VALUE-"))
+	  (n-ones (gensym "N-ONES-"))
+	  (integer-size-temp (gensym "INTEGER-SIZE-"))
+	  (n-bits-temp (gensym "N-BITS-"))
+	  (selected-bits (gensym "SELECTED-BITS-")))
+      `(let* (,@(mapcar #'list dummies vals)
+              (,old-value ,getter)
+		(,n-bits-temp ,n-bits)
+		(,integer-size-temp ,integer-size)
+		(,n-ones (1- (ash 1 ,n-bits-temp)))
+		(,selected-bits (logand ,old-value (ash ,n-ones (- ,integer-size-temp ,n-bits-temp))))
+		(,(car newval) (- ,old-value ,selected-bits))
+		,@(cdr newval))
+         ,setter
+         (ash ,selected-bits
+	      (- (- ,integer-size-temp ,n-bits-temp)))))))
+
+(defmacro pop-bits/le (n-bits integer-place)
+  "Pops the N LEAST significant bits off the front of the INTEGER-PLACE and returns it.
+INTEGER-SIZE is the number of bits in the integer."
+  (multiple-value-bind (dummies vals newval setter getter)
+      (get-setf-expansion integer-place)
+    (let ((old-value (gensym))
+	  (n-ones (gensym))
+	  (n-bits-temp (gensym))
+	  (selected-bits (gensym)))
+      `(let* (,@(mapcar #'list dummies vals)
+              (,old-value ,getter)
+		(,n-bits-temp ,n-bits)
+		(,n-ones (1- (ash 1 ,n-bits-temp)))
+		(,selected-bits (logand ,old-value ,n-ones))
+		(,(car newval) (ash ,old-value (- ,n-bits-temp)))
+		,@(cdr newval))
+         ,setter
+         ,selected-bits))))
