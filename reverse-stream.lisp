@@ -43,7 +43,7 @@ sizes that are multiples of 8 bits, such as (UNSIGNED-BYTE 24)."))
        		
 
 (defgeneric wrap-in-reverse-stream (object)
-  (:documentation "Creates a BIT-STREAM that can read one bit at a time from the OBJECT. The BIT-STREAM
+  (:documentation "Creates a REVERSE-STREAM that can read one bit at a time from the OBJECT. The REVERSE-STREAM
 can be discarded if BYTE-ALIGNED-P returns T."))
 
 (defmethod wrap-in-reverse-stream ((object stream))
@@ -125,16 +125,16 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 
 
 #-sbcl
-(defmethod stream-read-sequence ((stream bit-stream) sequence start end &key &allow-other-keys)
+(defmethod stream-read-sequence ((stream reverse-stream) sequence start end &key &allow-other-keys)
   (%stream-read-sequence stream sequence start end))
 
 #+sbcl
-(defmethod sb-gray:stream-read-sequence ((stream bit-stream) (sequence array) &optional start end)
+(defmethod sb-gray:stream-read-sequence ((stream reverse-stream) (sequence array) &optional start end)
   (%stream-read-sequence stream sequence (or start 0) (or end (length sequence))))
 
 
 #-sbcl
-(defmethod stream-file-position ((stream bit-stream))
+(defmethod stream-file-position ((stream reverse-stream))
   (file-position (slot-value stream 'real-stream)))
 
 #+sbcl

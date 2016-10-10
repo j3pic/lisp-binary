@@ -626,7 +626,7 @@ that would normally be bound must be added with a LET form."
 					      :align ,align
 					      :element-align ,element-align
 					      :bind-index-to ',bind-index-to))
-			    (declare (ignorable ,irrelevant ,runtime-reader ,runtime-writer))
+			    (declare (ignorable ,irrelevant ,runtime-reader ,runtime-writer ,stream-symbol))
 			    (eval `(let ,,struct-name-binding
 				     ,(runtime-reader/writer-form ,reader/writer ',byte-count-name ,byte-count-name
 								  ',stream ,stream-symbol `previous-defs-symbol))))))))
