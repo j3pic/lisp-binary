@@ -481,7 +481,7 @@ variables are bound. Since the EVAL type specifier produces code that will use t
 that would normally be bound must be added with a LET form."
   `(let ((,byte-count-name ,byte-count)
 	 (,stream-symbol ,stream))
-     (declare (ignorable ,byte-count-name))
+     (declare (ignorable ,stream-symbol ,byte-count-name))
      (let ,let-defs
        (declare (ignorable ,@(loop for (var val) in let-defs collect var)))
        ,reader-or-writer)))
