@@ -190,8 +190,8 @@ Example:
 
 (defun read-enum (enum stream)
   (let ((enum-def (if (enum-definition-p enum)
-		       enum
-		       (gethash enum *enum-definitions*))))
+		      enum
+		      (gethash enum *enum-definitions*))))
     (multiple-value-bind (raw-value bytes-read)
 	(read-integer (slot-value enum-def 'size) stream
 		      :byte-order (let ((byte-order (slot-value enum-def 'byte-order)))
@@ -206,7 +206,7 @@ Example:
 		  :symbol-value nil
 		  :enum-name (slot-value enum-def 'name)
 		  :format-control "Value ~a is not a value in enum ~a"
-		  :format-arguments (list raw-value (slot-value enum-def 'name)))
+		  :format-arguments (list raw-value (slot-value enum-def 'name))))
        bytes-read))))
 
 (defun decode-ip-addr (raw-msb)
@@ -1065,6 +1065,9 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 			,bytes))))
 	    (setf writer*
 		  `(write-bytes
+		    ;; FIXME: Pad the string up to the LENGTH if it is too
+		    ;;        short. Truncate or throw an exception if it
+		    ;;        is too long.
 		    (string-to-octets ,name :external-format ,external-format)
 		    ,stream-symbol))
 	    '(:type string))
@@ -1879,6 +1882,11 @@ TYPES
             Specifies a C-style terminated string. The TERMINATOR is an integer that will be en/decoded
             according to the field's BYTE-ORDER. As such, it is capable of being more than one byte long,
             so it can be used to specify multi-character terminators such as CRLF.
+
+        (FIXED-LENGTH-STRING length &key (external-format :latin1))
+
+            Specifies a string of fixed length. When writing, any excess space
+            in the string will be padded with zeroes.
 
         (MAGIC &key actual-type value)
 
