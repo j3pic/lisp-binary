@@ -67,11 +67,13 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defun foreign-read-into-array (array fd)
   "FIXME: Doesn't actually work, and even if it did, it would have to allocate a C buffer and then
 copy it into the Lisp array afterwards, which is suboptimal."
-  #+unix (foreign-funcall "read" :int fd (:pointer :uchar) (convert-to-foreign array '(:pointer :uchar))
+  (declare (ignore array fd))
+  #+unix-disabled (foreign-funcall "read" :int fd (:pointer :uchar) (convert-to-foreign array '(:pointer :uchar))
 			  #+x86 :uint32
 			  #+x86-64 :uint64 (length array)
 			  :int)
-  #+windows (error "Not implemented on Windows"))
+  #+windows (error "Not implemented on Windows")
+  (values))
 
 (declaim (inline real-read-byte real-write-byte))
 

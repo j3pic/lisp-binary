@@ -3,7 +3,7 @@
   (:export :get-lsb-byte :encode-lsb :decode-lsb :encode-msb
 	   :signed->unsigned :unsigned->signed :unsigned->signed/bits
 	   :signed->unsigned/bits 
-	   :read-integer :read-bytes :write-bytes :pop-bits
+	   :read-integer :write-integer :read-bytes :write-bytes :pop-bits
 	   :split-bit-field :join-field-bits :pop-bits/le
 	   :push-bits :push-bits/le :bit-stream))
 
@@ -178,7 +178,7 @@ Better performance could be acheived if INTEGER could be a FIXNUM, but it can't.
 
 (defun join-field-bits (field-bits field-signedness field-values)
   (let ((result 0))
-    (loop for (nil next-bits . rest-bits) 
+    (loop for (bits next-bits . rest-bits) 
        on field-bits
        for value in field-values
        for signed = (pop field-signedness)
@@ -186,7 +186,7 @@ Better performance could be acheived if INTEGER could be a FIXNUM, but it can't.
 	  (setf result
 		(logior result
 			(if signed
-			    (signed->unsigned value)
+			    (signed->unsigned value (/ bits 8))
 			    value)))
 	 (when next-bits
 	   (setf result (ash result next-bits))))

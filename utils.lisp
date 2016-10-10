@@ -4,7 +4,7 @@
   (:export :subst* :struct-like-defclass :bind-class-slots :remove-plist-keys :recursive-find
 	   :recursive-map :assoc-cdr :aif :awhen :it :destructuring-case :recursive-find/collect :plist-replace
 	   :recursive-find-if :recursive-mapcar :letf :relative-file-position :group :let-values* :let-values :divisiblep
-	   :named-let :pushover :insert-before :has-sublist-p :find-sublist :recursive-find-sublist :remove-binding))
+	   :named-let :pushover :insert-before :has-sublist-p :find-sublist :recursive-find-sublist :remove-binding :mapseq))
 
 (in-package :lisp-binary-utils)
 
@@ -216,16 +216,7 @@ extract the needed variable names for binding."
   (loop for (key value) of-type (keyword t) on plist by #'cddr
        unless (member key keys)
          collect key
-         and collect value))
-	       	     	 
-
-(defun recursive-find (item tree)
-  (find-if (lambda (elem)
-	     (if (listp elem)
-		 (let ((subresult (recursive-find item elem)))
-		   (if subresult
-		       (return-from recursive-find subresult)))
-		 (eql item elem))) tree))
+         and collect value))	       	     	 
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defmacro aif (test then &optional else)
