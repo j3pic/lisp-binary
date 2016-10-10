@@ -16,8 +16,8 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 
 	   :*byte-order*
 	 :read-binary :write-binary :read-terminated-string :write-terminated-string :buffer :terminated-string
-	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic
-	 :fixed-length-string :bit-field :open-binary :with-open-binary-file))
+	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
+	 :bad-value :required-value :fixed-length-string :bit-field :open-binary :with-open-binary-file))
 	 
 (in-package :lisp-binary)
 
@@ -160,6 +160,7 @@ Example:
        ',name)))
 
 (define-condition bad-enum-value (simple-error) (integer-value symbol-value enum-name))
+(define-condition bad-magic-value (simple-error) (bad-value required-value))
 
 (defun get-enum-value (enum symbol)
   (let ((definition (if (enum-definition-p enum)
@@ -1036,8 +1037,11 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 				  (multiple-value-bind (,v ,bytes-read) ,reader
 				    (unless (equal ,v ,required-value)
 				      (restart-case
-					  (error "Invalid magic number: ~a (expected: ~a)~%"
-						 ,v ,required-value)
+					  (error 'bad-magic-value :bad-value ,v
+						 :required-value ,required-value
+						 :format-control
+						 "Invalid magic number: ~a (expected: ~a)~%"
+						 :format-arguments (list ,v ,required-value))
 					(continue ()
 					  :report "Ignore the error and continue loading"
 					  nil)))
@@ -1894,8 +1898,11 @@ TYPES
             read as type ACTUAL-TYPE.
 
             If the value read is not CL:EQUAL to the VALUE given, then a condition of type
-            SIMPLE-ERROR will be raised. The error can be ignored by invoking the CL:CONTINUE
-            restart.
+            BAD-MAGIC-VALUE will be raised.
+
+            A BAD-MAGIC-VALUE object contains the slots BAD-VALUE and REQUIRED-VALUE.
+
+            The error can be ignored by invoking the CL:CONTINUE restart. 
 
         (BIT-FIELD &key raw-type member-types)
 
