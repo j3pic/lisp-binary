@@ -11,6 +11,8 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :integer-value :symbol-value :enum-name :bad-enum-value
 	   :read-bits
 	   :write-bits
+	   :read-float
+	   :write-float
 	   
 	   :defbinary
 
@@ -248,18 +250,25 @@ Example:
 (defun read-terminated-string (stream &key (terminator (buffer 0)))
   (declare (type stream stream)
 	   (type (simple-array (unsigned-byte 8) (*)) terminator))
-  (let ((term-ix 0)
-	(bytes-read 0)
-	(result (make-array 0 :element-type '(unsigned-byte 8)
-			    :fill-pointer t :adjustable t)))
-    (loop for byte = (prog1 (read-byte stream)
-		       (incf bytes-read))
-	 do (vector-push-extend byte result)
-	 (when (eq byte (aref terminator term-ix))
-	   (incf term-ix)
-	   (when (eq term-ix (length terminator))
-	     (loop repeat (length terminator) do (array-pop result))
-	     (return-from read-terminated-string (values result bytes-read)))))))
+  (restart-case
+      (let ((term-ix 0)
+	    (bytes-read 0)
+	    (result (make-array 0 :element-type '(unsigned-byte 8)
+				:fill-pointer t :adjustable t)))
+	(loop for byte = (prog1 (read-byte stream)
+			   (incf bytes-read))
+	   do (vector-push-extend byte result)
+	     (when (eq byte (aref terminator term-ix))
+	       (incf term-ix)
+	       (when (eq term-ix (length terminator))
+		 (loop repeat (length terminator) do (array-pop result))
+		 (return-from read-terminated-string (values result bytes-read))))))
+    (use-value (value)
+      :report "Provide a string to use instead."
+      :interactive (lambda ()
+		     (format t "Enter a value of type STRING (evaluated): ")
+		     (list (eval (read))))
+      (values (flexi-streams:string-to-octets value) 0))))
 
 (defmethod read-binary ((type (eql 'terminated-string)) stream)
   (read-terminated-string stream))
