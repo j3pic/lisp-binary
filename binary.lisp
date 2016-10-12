@@ -19,7 +19,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :*byte-order*
 	 :read-binary :write-binary :read-terminated-string :write-terminated-string :buffer :terminated-string
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
-	 :bad-value :required-value :fixed-length-string :bit-field :open-binary :with-open-binary-file))
+	 :bad-value :required-value :fixed-length-string :bit-field :open-binary :with-open-binary-file :use-string-value))
 	 
 (in-package :lisp-binary)
 
@@ -263,7 +263,7 @@ Example:
 	       (when (eq term-ix (length terminator))
 		 (loop repeat (length terminator) do (array-pop result))
 		 (return-from read-terminated-string (values result bytes-read))))))
-    (use-value (value)
+    (use-string-value (value)
       :report "Provide a string to use instead."
       :interactive (lambda ()
 		     (format t "Enter a value of type STRING (evaluated): ")
@@ -506,12 +506,96 @@ that would normally be bound must be added with a LET form."
 			(offset 0 :type integer)
 			(type nil :type symbol)
 			(base-pointer :beginning :type keyword)
-			(stream *standard-input* :type keyword))
-  (defstruct out-pointer
-    object
-    (pointer-offset-in-file 0 :type integer)))
+			(stream *standard-input* :type keyword)))
 
-(defparameter *out-pointers* nil)
+(defstruct out-pointer
+  (offset-position 0 :type number)
+  (offset-size/bytes 0 :type number)
+  (offset-byte-order :little-endian :type keyword)
+  (offset-signedness nil :type boolean)
+  (buffer-to-store #()))
+
+(defvar *queued-pointers* nil)
+
+(defmacro push-to-tag (obj tag)
+  "Add the OBJ to the queue for TAG.
+
+This is the shittiest implementation ever. It functionally rebuilds the entire
+tag list each time it runs, sometimes discarding this rebuild and going with
+the original version. 
+
+There are several reasons for this. First, the tag system can tolerate a
+direct SETF of *QUEUED-POINTERS*, but it cannot tolerate mutation of the
+underlying data structure. That is because I'm attempting to rely on the
+way special variables work in multithreaded Lisps as a source of thread
+safety. Mutating *QUEUED-POINTERS* with RPLACA or RPLACD could be seen
+in another thread, but rebuilding the list and SETFing it will not affect
+other threads.
+
+FIXME: This approach doesn't provide thread safety unless every
+thread binds *QUEUED-POINTERS* with a LET or LAMBDA form. The
+WRITE-BINARY method can't do this because it must be able to
+push items onto the tag that can be seen by other implementations
+of WRITE-BINARY that might have the corresponding DUMP-TAG call."
+  (alexandria:with-gensyms (found-tag result existing-tag objects)
+    `(let* ((,found-tag nil)
+	    (,result (loop for node in *queued-pointers*
+			  for (,existing-tag . ,objects) = node
+			if (eq ,existing-tag ,tag)
+			collect (prog1 (cons ,tag (cons ,obj ,objects))
+				  (setf ,found-tag t))
+			else collect node)))
+       (setf *queued-pointers*
+	     (if ,found-tag
+		 ,result
+		 (cons (list ,tag ,obj) *queued-pointers*))))))
+
+(defun clear-tag (tag)
+  (setf *queued-pointers*
+	(remove tag *queued-pointers* :key #'car)))
+
+(defun get-tag (tag)
+  (cdr (assoc tag *queued-pointers*)))
+
+(defun queue-write-pointer (tag offset-position offset-size/bytes offset-byte-order offset-signedness buffer)
+  "Queue some data to be written at a later time, and for its address to be written to the OFFSET-POSITION at
+that time."
+  (push-to-tag (make-out-pointer
+		:offset-position offset-position
+		:offset-size/bytes offset-size/bytes
+		:offset-byte-order offset-byte-order
+		:offset-signedness offset-signedness
+		:buffer-to-store buffer)
+	       tag))
+
+(defun dump-tag (tag base-pointer stream)
+  (prog1
+      (loop for out-pointer in (get-tag tag)
+	 for offset = (- (file-position stream) base-pointer)
+	 sum (with-slots (offset-position offset-size/bytes offset-byte-order offset-signedness
+					  buffer-to-store) out-pointer
+	       (with-file-position (offset-position stream)
+		 (write-integer offset offset-size/bytes stream :byte-order offset-byte-order
+				:signed offset-signedness))
+	       (write-bytes buffer-to-store stream)))
+    (clear-tag tag)))
+
+(defvar *base-pointer-tags* nil)
+
+(defun add-base-pointer-tag (tag pointer)
+  (let ((old-tags *base-pointer-tags*)
+	(new-tags (pushnew (cons tag pointer) *base-pointer-tags*
+			   :key #'car)))
+    (if (eq old-tags new-tags)
+	(setf *base-pointer-tags*
+	      (mapcar (lambda (existing-tag)
+			(if (eq (car tag)
+				existing-tag)
+			    (cons tag pointer)
+			    existing-tag)) *base-pointer-tags*)))))
+
+(defun get-base-pointer-tag (tag)
+  (cdr (assoc tag *base-pointer-tags*)))
 
 ;; One difficult thing to do is handle offsets within files. Some
 ;; file formats specify entire tables of offsets in the middle of
@@ -601,13 +685,6 @@ that would normally be bound must be added with a LET form."
       ;; be evaluated at runtime, and then its value must be expanded at runtime in order to
       ;; determine how to read it. The expansion will produce a reader and writer that must be
       ;; EVAL'd into existence during the read and write processes.
-      ;;
-      ;; FIXME: If the type is NULL, then a STYLE-WARNING will be issued at runtime complaining that
-      ;; the STREAM-SYMBOL variable was defined but never used.
-      ;;
-      ;; SOLUTION: Remove the definition for the STREAM-SYMBOL (REMOVE-BINDING) if that symbol isn't
-      ;;           used in the body (TODO: write a function that searches for a symbol in the body
-      ;;           but not in any LET forms).
       (let ((stream (gensym))
 	    (value (gensym))
 	    (reader/writer (gensym))
@@ -775,11 +852,6 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	   ((type &key raw-type member-types)
 	    :where (eq type 'bit-field)	    
 	    (letf (((slot-value type-info 'type) raw-type))
-	      ;; FIXME: Some asshole could define a file format which puts
-	      ;;        a POINTER in a bit-field. The code written here ignores
-	      ;;        that possibility, which makes DEFBINARY crippled for
-	      ;;        the purpose of dealing with those kinds of file formats.
-	      ;;
 	      (multiple-value-bind (real-raw-type reader writer)
 		  (expand-defbinary-type-field struct-name type-info)
 		(declare (ignore writer))
@@ -841,198 +913,93 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		     (list :type member-types)))
 		  (otherwise
 		   (error "Invalid BIT-FIELD :RAW-TYPE value: ~S" raw-type))))))
-					 
-	   ((type &key pointer-type data-type (base-pointer :beginning-of-file))
+	   ((type &key name)
+	    :where (eq type 'base-pointer)
+	    (setf reader* `(let ((file-position (file-position ,stream-symbol)))
+			     (add-base-pointer-tag ,name file-position)
+			     (values file-position 0)))
+	    (setf writer* `(progn
+			     (add-base-pointer-tag ,name (file-position ,stream-symbol))
+			     0))
+	    '(:type t))
+	   ((type &key base-pointer-name)
+	    :where (eq type 'region-tag)
+	    (setf reader* `(values ,base-pointer-name 0))
+	    (setf writer* `(dump-tag ',name (if ,base-pointer-name
+						(get-base-pointer-tag ,base-pointer-name)
+						0) ,stream-symbol))
+	    '(:type t))
+	   ((type &key pointer-type data-type base-pointer-name region-tag)
 	    :where (eq type 'pointer)
-	    (warn "The POINTER type is not fully implemented yet! The resulting reader/writer will probably fail.")
 	    (letf (((slot-value type-info 'type) pointer-type))
-	      ;; FIXME: Here we read the POINTER-READER and POINTER-WRITER, but
-	      ;;        we need to add code to read and write the underlying object.
-	      ;;        Since that object perhaps shouldn't be read or written until
-	      ;;        the DEFBINARY struct is finished being read or written, that
-	      ;;        means we have to store the resulting code somewhere, and this
-	      ;;        place hasn't been created yet.
-	      ;;
-	      ;; One thing that has to be considered is that if you have struct A which
-	      ;; contains struct B, and B's pointers are supposed to be written after
-	      ;; the headers for B itself and before the end of A, then most likely this
-	      ;; will be implemented as B containing a counted buffer, and the pointers
-	      ;; will be offsets into this buffer.
-	      ;;
-	      ;; The programmer needs to specify the presence of this buffer, but perhaps
-	      ;; this library can be smart enough to avoid actually reading it into a buffer
-	      ;; before splitting it up into its constituent parts. This would require some
-	      ;; voodoo, since the library as currently written considers each field in
-	      ;; isolation.
-	      ;;
-	      ;; One possible solution is that when the programmer specifies that an
-	      ;; offset points into a buffer we raise an exception here. The main
-	      ;; macro would catch this exception, and via a restart it would return
-	      ;; the additional information needed to set the FILE-POSITION correctly.
-	      ;; It would also take the opportunity to set a flag that prevents the
-	      ;; buffer's type-definition from generating code to read the buffer.
-	      ;;
-	      ;; Or perhaps not, since the buffer would be an actual slot in the struct,
-	      ;; so its contents should be accessible.
-	      ;;
-	      ;; When writing this buffer out, its total size would have to be computed
-	      ;; and included in the SIZE component.
-	      ;;
-	      ;; But the programmer would probably specify the buffer as being a
-	      ;; SIMPLE-ARRAY whose elements have the type of the objects that are
-	      ;; pointed to. This results in the buffer containing the actual objects
-	      ;; instead of just bytes. But then the pointers are useless. They could
-	      ;; be resolved by creating an array of the sizes of each of the objects
-	      ;; read into the array. This array would have to be created at read-time,
-	      ;; which currently does not happen.
-	      ;;
-	      ;; Writing is a problem, since the pointers' values must be known before
-	      ;; the sizes of the objects are known, since pointers usually appear before
-	      ;; the data they point to. This wouldn't be a problem if the stream is opened
-	      ;; with :DIRECTION :IO (but there are other problems), but the stream will
-	      ;; probably be :DIRECTION :OUTPUT.
-	      ;;
-	      ;; The only solution I can think of right now is to write the array out to
-	      ;; a buffer, and then calculate the pointer values from the buffer. Then
-	      ;; the buffer is written to disk.
-	      ;;
-	      ;;; FIXME 2
-	      ;;
-	      ;; If, on the other hand, A contains B and B's pointers go after A, this
-	      ;; presents a problem of a different nature. This time, B's pointers
-	      ;; have to be written by A's WRITE-BINARY method instead of B's. Arranging
-	      ;; for this to happen is difficult to conceive of.
-	      ;;
-	      ;; First comes the question of how to specify that B's pointers should be
-	      ;; written after A. It's probably best to specify this as part of the slot
-	      ;; definition for the object of type B.
-	      ;;
-	      ;; Then comes the question of ensuring that the pointers in B are first
-	      ;; ignored by B, and then written by A. Some voodoo may come into play here.
-	      ;; Perhaps we need an auxilliary pointer-writing method that does nothing
-	      ;; but write the pointers. Then A would call B's pointer-writing method.
-	      ;;
-	      ;; Again, it may be necessary for B's WRITE-BINARY to store some of its output
-	      ;; in a buffer somewhere so that it doesn't need the stream to be open in :IO
-	      ;; mode. But then it would be necessary for some other method to write this
-	      ;; buffer to disk.
-	      ;;
-	      ;; Or we could just stipulate that files that contain POINTERs must be open
-	      ;; as ;IO, which would make things much easier. Then all of a sudden, POINTERs
-	      ;; can be written to disk as 0, and then they can be updated when the actual
-	      ;; value is known (after writing the corresponding objects to disk).
-	      ;;
-	      ;; FIXME 3
-	      ;;
-	      ;; But updating those pointers will be difficult if A contains pointers into
-	      ;; buffers in B. The problem is that B has to produce pointer information in
-	      ;; either WRITE-BINARY or the pointer-writing method that A's pointer-writing
-	      ;; method can use to determine the final address of its pointers.
-	      ;;
-	      ;; The process would look something like this:
-
-	      ;; 1. Write A's pointers as 0.
-	      ;; 2. Write B and the buffers it contains
-	      ;; 3. Iterate through A's pointers and:
-	      ;;    a. Return to the address at which each one was
-	      ;;       written.
-	      ;;    b. Find the corresponding object in B and
-	      ;;       the address it was written to on disk
-	      ;;    c. Overwrite the 0 pointer with this address.
-	      ;;
-	      ;; Step (b) requires the method that implements Step 2 to return extra
-	      ;; information. Specifically, it must return an alist that maps objects
-	      ;; to on-disk offsets. Naming this alist OBJECT-ADDRESSES and assuming that
-	      ;; A's STRUCT contains the object as the value of the pointer's slot, Steps (a), (b)
-	      ;; and (c) would then be implemented something like this:
-	      ;;
-	      ;;   (let ((ptr (cdr (assoc (slot-value A 'pointer-into-b) object-addresses))))
-	      ;;       (file-position the-stream (the-adddress-of-the-pointer A 'pointer-into-b))
-	      ;;       (write-integer ptr 4 stream))
-	      ;;
-	      ;; Step 2 is implemented by WRITE-BINARY, which currently returns the number of
-	      ;; bytes written.
-	      ;;
-	      ;; The above solution fails if the value types of the pointers may not be represented
-	      ;; as references in Lisp. For example, if two pointers exist to two distinct
-	      ;; (UNSIGNED-BYTE 8) that each containt the byte 0x3, the same address might be written
-	      ;; for both pointers, because (EQ 3 3) = T, and (assoc 3 object-addresses) will always
-	      ;; return the first address that points to a 3 byte.
-	      ;;
-	      ;; This wouldn't be a problem in C, because you could make sure that *everything* is
-	      ;; a pointer. In Lisp, you could simulate a pointer by storing three values:
-	      ;;
-	      ;;   (struct-object slot-name &optional index)
-	      ;;
-	      ;; Then you could point to the *specific* instance of 0x3 and you wouldn't have the
-	      ;; EQ problem.
-	      ;;
-	      ;; Another failure mode exists if B contains pointers into A. In the first case, we
-	      ;; implied that B's WRITE-BINARY could return an extra value that could become the
-	      ;; OBJECT-ADDRESSES list. But in this case, B's WRITE-POINTERS must RECEIVE extra data from
-	      ;; A to use as the OBJECT-ADDRESSES.
-	      ;;
-	      ;; That implies that every implementation of Step 3 must occur in a WRITE-POINTERS method
-	      ;; that receives OBJECT-ADDRESSES as an argument.
-	      ;;
-	      ;; So it follows that:
-	      ;;
-	      ;; 1. Every WRITE-BINARY that writes out buffers that have pointers into them
-	      ;;    must maintain a local version of OBJECT-ADDRESSES.
-	      ;; 2. The OBJECT-ADDRESSES must be returned as the second value, and also passed
-	      ;;    as the second parameter to every call to WRITE-POINTERS that occurs within the method.
-	      ;; 3. There is no way to statically know if a binary-struct's buffers have pointers into
-	      ;;    them from other, yet-to-be-defined structs. Therefore, ANY buffer or array type
-	      ;;    requires the creation and maintenance of an OBJECT-ADDRESSES list.
-	      ;;
-	      ;; That third point is terrible news, since it implies that the performance penalty of
-	      ;; creating OBJECT-ADDRESSES must be paid even when the data is not used in the program.
-	      ;;
-	      ;; Also, when writing large files there might not be enough room to create OBJECT-ADDRESSES,
-	      ;; and even if there is, it should be a hash-table, since OBJECT-ADDRESSES is a runtime
-	      ;; value and not a compile-time value.
-	      ;;
-	      ;; This also fails to address the situation where the binary file is SO immensely big,
-	      ;; that the programmer only wants to load a portion of the file. Typically, you would
-	      ;; want to load the header, but leave the pointers and the buffers they point into
-	      ;; unloaded until they are needed. This reading mode can even be used in read/write
-	      ;; use-cases, by writing the file in-place as changes take place. This situation might
-	      ;; occur if you wanted to manipulate a database file, such as the Bitcoin blockchain.
-	      
 	      (multiple-value-bind (pointer-defstruct-type pointer-reader pointer-writer)
 		  (expand-defbinary-type-field struct-name type-info)
-		(declare (ignore pointer-defstruct-type))
-		(setf reader* pointer-reader)
-		(setf writer* pointer-writer)
+		(declare (ignore pointer-defstruct-type)
+			 (optimize (speed 0) (debug 3)))
 		(letf (((slot-value type-info 'type) data-type))
-		  (multiple-value-bind (data-defstruct-type data-reader data-writer)
+		  (multiple-value-bind (defstruct-type data-reader data-writer)
 		      (expand-defbinary-type-field struct-name type-info)
-		    (declare (ignore data-writer))
-		    (setf read-pointer-resolver
-			  `(progn
-			     ,(ecase base-pointer
-				     ;; FIXME: Can't use BYTE-COUNT-NAME because
-				     ;;        previously-executed pointer-resolvers
-				     ;;        will affect its value. In fact, the
-				     ;;        value of BYTE-COUNT-NAME could be
-				     ;;        completely worthless for a struct
-				     ;;        that includes resolved pointers!
-				     ;;
-				     ;;        This extreme case happens if the same pointer
-				     ;;        occurs more than once, which does happen
-				     ;;        in Windows executables. In that case, the
-				     ;;        BYTE-COUNT-NAME variable will indicate more
-				     ;;        bytes than were actually read.
-				     ;;
-				     ;;        Furthermore, it would be undesireable to read
-				     ;;        the same pointer from disk more than once. Instead,
-				     ;;        pointer resolution should be memoized.
-				     ;;
-				     ;;        What a difficult problem!
-				     (:beginning-of-file
-				      `(file-position ,stream-symbol ,name)))
-			     (setf ,name ,data-reader)))
-		    data-defstruct-type)))))
+		    (setf reader* (alexandria:with-gensyms (pointer-value base-pointer-address pointer-bytes-read
+									  pbr2 pv2)
+				    `(let* ((,pointer-bytes-read nil)
+					    (,base-pointer-address ,(if base-pointer-name
+									`(get-base-pointer-tag ,base-pointer-name)
+									0))
+					    (,pointer-value (+ ,base-pointer-address
+							       (multiple-value-bind (,pv2 ,pbr2)
+								   ,pointer-reader
+								 (setf ,pointer-bytes-read ,pbr2)
+								 ,pv2))))
+				       (with-file-position (,pointer-value ,stream-symbol)
+					 (values ,data-reader ,pointer-bytes-read)))))
+		    (setf writer* (alexandria:with-gensyms (buffer sequence-stream)
+				    `(let ((,buffer (flexi-streams:with-output-to-sequence (,sequence-stream)
+						      ,(subst*
+							`((,stream-symbol ,sequence-stream))
+							data-writer))))
+				       (queue-write-pointer ,region-tag (file-position ,stream-symbol)
+							    ;; Trying to figure out the size, byte order, and
+							    ;; signedness of the pointer by analyzing the code
+							    ;; that was generated to write it.
+							    ,@(destructuring-case (recursive-find-sublist '(write-integer) pointer-writer)
+										  ((write-integer number size stream &key (byte-order :little-endian) signed)
+										   (declare (ignore write-integer number stream))
+										   (list size byte-order signed))
+										  (otherwise
+										   (restart-case
+										       (error "Can't determine the format of a pointer of type ~a" pointer-type)
+										     (use-type (new-pointer-type)
+										       :report "Enter a different pointer type to use"
+										       :interactive (lambda ()
+												      (format t "Enter the new type: ")
+												      (list (read)))
+										       (letf (((slot-value type-info 'type)
+											       `(pointer :pointer-type ,new-pointer-type
+													:data-type ,data-type
+													:base-pointer-name ,base-pointer-name
+													:region-tag ,region-tag)))
+											 (return-from expand-defbinary-type-field
+											   (expand-defbinary-type-field struct-name type-info))))
+										     (enter-parameters (size byte-order signedness)
+										       :report "Enter the pointer parameters manually"
+										       :interactive (lambda ()
+												      (list (progn
+													      (format t "Enter the size in bytes of the pointer: ")
+													      (eval (read)))
+													    (progn
+													      (format t "Enter the byte order of the pointer (:LITTLE-ENDIAN or :BIG-ENDIAN): ")
+													      (eval (read)))
+													    (progn
+													      (format t "Is it signed? (Y/n): ")
+													      (if (find #\n (read-line)
+															:test #'equalp)
+														  nil
+														  t))))
+										       (list size byte-order signedness)))))
+							    ,buffer)
+				       (let ((,name 0))
+					 ,pointer-writer))))
+		    defstruct-type)))))
 	   ((type &key (actual-type '(unsigned-byte 16)) (value 0))
 	    :where (eq type 'magic)
 	    (letf (((slot-value type-info 'type)
