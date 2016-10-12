@@ -17,6 +17,9 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :defbinary
 
 	   :*byte-order*
+	   :base-pointer
+	   :region-tag
+	   :pointer
 	 :read-binary :write-binary :read-terminated-string :write-terminated-string :buffer :terminated-string
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
 	 :bad-value :required-value :fixed-length-string :bit-field :open-binary :with-open-binary-file :use-string-value))
@@ -31,6 +34,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
     "An alist whose keys are the names of DEFBINARY structs and
 whose values are the field-descriptions of those structs. Needed
 by TYPE-SIZE")
+  (defvar *ignore-on-write* nil)
   (defun get-type-fields (type-name)
     (cdr (assoc type-name *known-defbinary-types*))))
 
@@ -517,7 +521,7 @@ that would normally be bound must be added with a LET form."
 
 (defvar *queued-pointers* nil)
 
-(defmacro push-to-tag (obj tag)
+(defun push-to-tag (obj tag)
   "Add the OBJ to the queue for TAG.
 
 This is the shittiest implementation ever. It functionally rebuilds the entire
@@ -537,18 +541,17 @@ thread binds *QUEUED-POINTERS* with a LET or LAMBDA form. The
 WRITE-BINARY method can't do this because it must be able to
 push items onto the tag that can be seen by other implementations
 of WRITE-BINARY that might have the corresponding DUMP-TAG call."
-  (alexandria:with-gensyms (found-tag result existing-tag objects)
-    `(let* ((,found-tag nil)
-	    (,result (loop for node in *queued-pointers*
-			  for (,existing-tag . ,objects) = node
-			if (eq ,existing-tag ,tag)
-			collect (prog1 (cons ,tag (cons ,obj ,objects))
-				  (setf ,found-tag t))
-			else collect node)))
-       (setf *queued-pointers*
-	     (if ,found-tag
-		 ,result
-		 (cons (list ,tag ,obj) *queued-pointers*))))))
+  (let* ((found-tag nil)
+	 (result (loop for node in *queued-pointers*
+		     for (existing-tag . objects***) = node
+		     if (eq existing-tag tag)
+		     collect (prog1 (cons tag (cons obj objects***))
+			       (setf found-tag t))
+		     else collect node)))
+    (setf *queued-pointers*
+	  (if found-tag
+	      result
+	      (cons (list tag obj) *queued-pointers*)))))
 
 (defun clear-tag (tag)
   (setf *queued-pointers*
@@ -583,16 +586,7 @@ that time."
 (defvar *base-pointer-tags* nil)
 
 (defun add-base-pointer-tag (tag pointer)
-  (let ((old-tags *base-pointer-tags*)
-	(new-tags (pushnew (cons tag pointer) *base-pointer-tags*
-			   :key #'car)))
-    (if (eq old-tags new-tags)
-	(setf *base-pointer-tags*
-	      (mapcar (lambda (existing-tag)
-			(if (eq (car tag)
-				existing-tag)
-			    (cons tag pointer)
-			    existing-tag)) *base-pointer-tags*)))))
+  (push (cons tag pointer) *base-pointer-tags*))
 
 (defun get-base-pointer-tag (tag)
   (cdr (assoc tag *base-pointer-tags*)))
@@ -913,13 +907,13 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		     (list :type member-types)))
 		  (otherwise
 		   (error "Invalid BIT-FIELD :RAW-TYPE value: ~S" raw-type))))))
-	   ((type &key name)
+	   ((type)
 	    :where (eq type 'base-pointer)
 	    (setf reader* `(let ((file-position (file-position ,stream-symbol)))
-			     (add-base-pointer-tag ,name file-position)
+			     (add-base-pointer-tag ',name file-position)
 			     (values file-position 0)))
 	    (setf writer* `(progn
-			     (add-base-pointer-tag ,name (file-position ,stream-symbol))
+			     (add-base-pointer-tag ',name (file-position ,stream-symbol))
 			     0))
 	    '(:type t))
 	   ((type &key base-pointer-name)
@@ -928,6 +922,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	    (setf writer* `(dump-tag ',name (if ,base-pointer-name
 						(get-base-pointer-tag ,base-pointer-name)
 						0) ,stream-symbol))
+	    (push name *ignore-on-write*)
 	    '(:type t))
 	   ((type &key pointer-type data-type base-pointer-name region-tag)
 	    :where (eq type 'pointer)
@@ -2100,6 +2095,7 @@ FLOATING-POINT NUMBERS
   (setf defstruct-options
 	(remove-plist-keys defstruct-options :export :byte-order :align :preserve-*byte-order*))
   (let* ((stream-symbol (gensym))
+	 (*ignore-on-write* nil)
 	 (bit-stream-groups (make-hash-table))
 	 (bit-stream-required nil)
 	 (previous-defs-symbol (gensym))
@@ -2195,15 +2191,16 @@ FLOATING-POINT NUMBERS
 			 (mod (mod current-pos ,align)))
 		    (unless (= mod 0)
 		      (loop repeat (- ,align mod) do (write-byte 0 ,stream-symbol))))))
-	  ,(let ((ignore-decls (loop for field in fields
-				  when
-				    (destructuring-case (binary-field-type field)
-				      ((eval &rest args)
-				       :where (eq eval 'eval)
-				       (declare (ignore args))
-				       t)
-				      (otherwise nil))
-				  collect (binary-field-name field)))
+	    ,(let ((ignore-decls (append *ignore-on-write*
+					 (loop for field in fields
+					    when
+					      (destructuring-case (binary-field-type field)
+						((eval &rest args)
+						 :where (eq eval 'eval)
+						 (declare (ignore args))
+						 t)
+						(otherwise nil))
+					    collect (binary-field-name field))))
 		 (let-defs (loop for f in (mapcar #'binary-field-name
 						  fields)
 			      if (listp f)
@@ -2214,7 +2211,7 @@ FLOATING-POINT NUMBERS
 			       '(*byte-order* *byte-order*)
 			       let-defs)
 		   ,@(if ignore-decls
-			 `((declare (ignore ,@ignore-decls))))
+			 `((declare (ignorable ,@ignore-decls))))
 		   ,@(loop for (stream-name . body)
 			in (group-write-forms (cons stream-symbol
 						    (remove nil (mapcar #'binary-field-bit-stream-id fields)))
