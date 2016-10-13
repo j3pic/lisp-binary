@@ -20,7 +20,13 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :base-pointer
 	   :region-tag
 	   :pointer
-	 :read-binary :write-binary :read-terminated-string :write-terminated-string :buffer :terminated-string
+	   :custom
+	   :read-binary :write-binary
+
+	   :read-binary-type
+	   :write-binary-type
+	   
+	   :read-terminated-string :write-terminated-string :buffer :terminated-string
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
 	 :bad-value :required-value :fixed-length-string :bit-field :open-binary :with-open-binary-file :use-string-value))
 	 
@@ -316,6 +322,12 @@ Returns three values:
   (unless (listp type-spec)
     (setf type-spec (list type-spec)))
   (destructuring-case type-spec
+    ((type &rest _)
+     :where (eq type 'custom)
+     (values 8 nil :normal-stream))
+    ((type &rest _)
+     :where (member type '(base-pointer file-position region-tag))
+     (values 0 nil :normal-stream))
     ((type &rest irrelevant)
      :where (member type '(bit-field pointer))
      (declare (ignore irrelevant))
@@ -326,6 +338,12 @@ Returns three values:
      :where (eq type 'magic)
      (declare (ignore crap))
      (type-size actual-type))
+    ((type &rest _ &key pointer-type &allow-other-keys)
+     :where (eq type 'pointer)
+     (multiple-value-bind (size can-be-in-bitstream stream-type)
+	 (type-size pointer-type)
+       (declare (ignore can-be-in-bitstream))
+       (values size nil stream-type)))
     ((type length &rest who-cares)
      :where (eq type 'fixed-length-string)
      (declare (ignore who-cares))
@@ -670,6 +688,47 @@ that time."
 	(read-binary (slot-value offset 'type) (slot-value offset 'stream))
       (file-position stream starting-position))))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun expand-read/write-binary-type-body (field-name value stream-name stream read/write-form)
+    `(let ((,field-name ,value)
+	   (,stream-name ,stream))
+       (declare (ignorable ,field-name ,stream-name))
+       ,read/write-form)))
+
+(defmacro read/write-binary-type (read-or-write type stream &key value (byte-order :little-endian) align element-align)
+  `(alexandria:with-gensyms (stream-name struct-name field-name)
+     (multiple-value-bind (defstruct-type runtime-reader runtime-writer)
+       (expand-defbinary-type-field struct-name
+			       (make-instance 'defbinary-type
+					      :name field-name
+					      :type ,type
+					      :byte-order ,byte-order
+					      :stream-symbol stream-name
+					      :previous-defs-symbol nil
+					      :align ,align
+					      :element-align ,element-align))
+       (declare (ignore defstruct-type ,(ecase read-or-write
+				(:read 'runtime-writer)
+				(:write 'runtime-reader))))
+       (eval ,(subst 'dig 'quote
+		     `',(expand-read/write-binary-type-body '(inject field-name) (list 'inject value) '(inject stream-name) (list 'inject stream)
+							    (ecase read-or-write
+							      (:read '(inject runtime-reader))
+							      (:write '(inject runtime-writer)))))))))
+       
+
+(defun read-binary-type (type stream &key (byte-order :little-endian) align element-align)
+  "Read a value of type TYPE from the STREAM. TYPE is any type supported by the DEFBINARY macro."
+  (read/write-binary-type :read type stream :byte-order byte-order
+			  :align align :element-align element-align))
+
+(defun write-binary-type (value type stream &key (byte-order :little-endian) align element-align)
+  "Write the VALUE, interpreting it as type TYPE, to the STREAM. The TYPE is any type supported by the
+DEFBINARY macro."
+  (read/write-binary-type :write type stream :byte-order byte-order
+			  :value value
+			  :align align :element-align element-align))
+
 (defun expand-defbinary-eval-type (struct-name type-info)
   (declare (type defbinary-type type-info)
 	   (optimize (safety 3)))
@@ -843,6 +902,11 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	 ;; All supported types are represented as patterns in this
 	 ;; DESTRUCTURING-CASE form. 
 	 (destructuring-case type
+	   ((type &key reader writer (lisp-type t))
+	    :where (eq type 'custom)
+	    (setf reader* `(funcall ,reader ,stream-symbol))
+	    (setf writer* `(funcall ,writer ,name ,stream-symbol))
+	    `(:type ,lisp-type))
 	   ((type &key raw-type member-types)
 	    :where (eq type 'bit-field)	    
 	    (letf (((slot-value type-info 'type) raw-type))
@@ -916,6 +980,13 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 			     (add-base-pointer-tag ',name (file-position ,stream-symbol))
 			     0))
 	    '(:type t))
+	   ((type)
+	    :where (eq type 'file-position)
+	    (setf reader* `(values (file-position ,stream-symbol)
+				   0))
+	    (setf writer* `(progn (setf ,name (file-position ,stream-symbol))
+				  0))
+	    '(:type integer))
 	   ((type &key base-pointer-name)
 	    :where (eq type 'region-tag)
 	    (setf reader* `(values ,base-pointer-name 0))
