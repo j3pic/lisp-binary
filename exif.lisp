@@ -231,7 +231,6 @@
 		 (file-position stream))
 	      stream))
 
-(defparameter *segments* nil)
 
 (defun remove-exif-data (input-file output-file)
   (with-open-binary-file (in input-file)
@@ -240,7 +239,6 @@
 				      (slot-value segment 'tag) 'code) 225)
 			    collect segment))
 	  (rest-of-image (read-rest-of-stream in)))
-      (setf *segments* jpeg-segments)
       (with-open-binary-file (out output-file
 				  :direction :io
 				  :if-exists :supersede

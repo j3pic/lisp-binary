@@ -20,6 +20,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :base-pointer
 	   :region-tag
 	   :pointer
+	   :with-local-pointer-resolving-context
 	   :custom
 	   :read-binary :write-binary
 
@@ -603,6 +604,16 @@ that time."
 
 (defvar *base-pointer-tags* nil)
 
+(defmacro with-local-pointer-resolving-context
+    (&body body)
+  "Deal with POINTERs in a thread-safe manner. Generated READ-BINARY and
+WRITE-BINARY methods rely on special variables to store information to
+make sure that offsets are calculated correctly. This macro creates local
+bindings of all the relevant special variables."
+  `(let ((*queued-pointers* *queued-pointers*)
+	 (*base-pointer-tags* *base-pointer-tags*))
+     ,@body))
+
 (defun add-base-pointer-tag (tag pointer)
   (push (cons tag pointer) *base-pointer-tags*))
 
@@ -904,8 +915,12 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	 (destructuring-case type
 	   ((type &key reader writer (lisp-type t))
 	    :where (eq type 'custom)
-	    (setf reader* `(funcall ,reader ,stream-symbol))
-	    (setf writer* `(funcall ,writer ,name ,stream-symbol))
+	    (setf reader* (if reader
+			      `(funcall ,reader ,stream-symbol)
+			      `(values nil 0)))
+	    (setf writer* (if writer			      
+			      `(funcall ,writer ,name ,stream-symbol)
+			      '(progn 0)))
 	    `(:type ,lisp-type))
 	   ((type &key raw-type member-types)
 	    :where (eq type 'bit-field)	    
@@ -1946,6 +1961,81 @@ TYPES
 
             The error can be ignored by invoking the CL:CONTINUE restart. 
 
+        BASE-POINTER
+
+            Instead of reading or writing this field, CL:FILE-POSITION will be called
+            on the current stream, and the address returned will be stored under a tag
+            with the same name as this slot. The tag can then be used to calculate
+            file positions and offsets. See the POINTER type for an example.
+
+        FILE-POSITION
+
+            Like BASE-POINTER, but no global tag is stored. The slot will contain the
+            address in the file of the next thing to be read. No actual reading or
+            writing is triggered by a slot of this type.
+        
+        (REGION-TAG &key base-pointer-name)
+
+            Instead of writing the value of this slot, all POINTERs that have the same
+            REGION-TAG name as this slot will be written out here, and the corresponding
+            offsets will be updated. The file being written must be opened with
+            :DIRECTION :IO. The POINTERs themselves will be written as offsets from
+            whatever object has the BASE-POINTER named BASE-POINTER-NAME.
+
+        (POINTER &key pointer-type data-type base-pointer-name region-tag)
+
+            Specifies that the value is really a pointer to another value somewhere else
+            in the file. When reading, if a BASE-POINTER-NAME is supplied and a base-pointer
+            tag has been created, then the pointer will be treated as an offset from that
+            base-pointer. If no BASE-POINTER-NAME is provided, then the pointer is treated
+            as being an absolute file-position.
+
+            The :POINTER-TYPE key specifies the type of the pointer itself, and must be some kind
+            of integer.
+
+            The :DATA-TYPE specifies the data that is being pointed to.
+
+            The :REGION-TAG is used when writing. When WRITE-BINARY writes this field, what
+            it really does is just write a zero pointer (since the object being pointed to
+            proably occurs later in the file, so we don't know what the address is going to
+            be yet). Then WRITE-BINARY stores the address OF THE POINTER, along with a
+            serialized representation  of the data to be written.  
+
+            When any WRITE-BINARY method gets to a REGION-TAG field, it writes out all the data
+            that has been stored under that tag's name, and goes back to update the pointers.
+
+            POINTERs cannot be automatically written if they point to an earlier part of the file
+            than they themselves occur (no backwards-pointing pointers).
+
+            Because it must go back and change what it has previously written, the stream must
+            be opened with :DIRECTION :IO.
+
+            All I/O involving POINTERs, REGION-TAGs, or BASE-POINTERs should be performed
+            within a WITH-LOCAL-POINTER-RESOLVING-CONTEXT block.
+
+            Example:
+
+               (defbinary bar ()
+                 (pointer-1 nil :type (pointer :pointer-type (unsigned-byte 16)
+                                               :data-type  (terminated-string 1)
+                                               :base-pointer-name foo-base
+                                               :region-tag foo-region))
+                 (pointer-2 0   :type (pointer :pointer-type (unsigned-byte 16)
+                                               :data-type quadruple-float)))
+
+               (defbinary foo ()
+                 (foo-base 0 :type base-pointer)
+                 (bar nil :type bar)
+                 (foo-region nil :type (region-tag :base-pointer-name foo-base)))
+                                                    
+
+               (with-local-pointer-resolving-context
+                   (let ((input (with-open-binary-file (in \"foo.bin\")
+                                   (read-binary 'foo in))))
+                      (with-open-binary-file (out \"bar.bin\"
+                                              :direction :io)
+                          (write-binary input stream))))
+
         (BIT-FIELD &key raw-type member-types)
 
             Specifies that multiple values are to be OR'd into a single integer for serialization
@@ -1962,9 +2052,27 @@ TYPES
             READ-BINARY will automatically separate the values in the bit field into their
             slots, and WRITE-BINARY will automatically OR them back together.
 
-        NIL
+        (CUSTOM &key reader writer (lisp-type t))
 
-            Reading and writing will be a no-op. The value of a field of type NIL will always read
+            Specifies a slot of type LISP-TYPE that will be read by the provided
+            READER function and written with the provided WRITER function
+
+            The READER function must accept the lambda-list (STREAM), and its
+            argument will be the stream currently being read.
+
+            The WRITER function must accept the lambda-list (OBJECT STREAM), and
+            it is generally expected to write the OBJECT to the STREAM.
+
+            If these functions are specified as LAMBDA forms, then they will
+            be closures. The READER can expect every field that has been read
+            so far to be bound to their names, while the WRITER can expect
+            to be able to see all the slots in the struct being written.
+
+            Both functions are optional.
+
+        NULL
+
+            Reading and writing will be a no-op. The value of a field of type NULL will always read
             as NIL and be ignored when writing.
 
 RUNTIME TYPE DETERMINATION 
