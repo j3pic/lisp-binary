@@ -1,6 +1,8 @@
 # lisp-binary
 A library to easily read and write complex binary formats.
 
+(Jump to [Documentation](https://github.com/heegaiximephoomeeghahyaiseekh/lisp-binary/wiki))
+
 LISP-BINARY provides the DEFBINARY macro, with which you can declare
 the structure of some piece of binary data, whether it's a file format,
 a network protocol, or what have you.
