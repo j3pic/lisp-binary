@@ -28,3 +28,7 @@ It is also possible to declare fields whose type isn't chosen until runtime, and
 fields that have custom reader and writer functions. With these features, this
 library can be used to both read and write nearly any binary format.
 
+LISP-BINARY also provides:
+
+* Primitives for reading integers, floats, and strings.
+* A bit-stream library which can be used to read as little as one bit at a time.
