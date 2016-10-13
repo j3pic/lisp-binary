@@ -26,5 +26,5 @@ other fields.
 
 It is also possible to declare fields whose type isn't chosen until runtime, and
 fields that have custom reader and writer functions. With these features, this
-library can be used to read nearly any binary format.
+library can be used to both read and write nearly any binary format.
 
