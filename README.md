@@ -28,6 +28,10 @@ It is also possible to declare fields whose type isn't chosen until runtime, and
 fields that have custom reader and writer functions. With these features, this
 library can be used to both read and write nearly any binary format.
 
+Both byte orders are supported for all data types, and the byte order can be declared either
+statically or dynamically (so that it changes as the file is read-- required by a number of
+formats, including TIFF).
+
 LISP-BINARY also provides:
 
 * Primitives for reading integers, floats, and strings.
