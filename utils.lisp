@@ -4,7 +4,8 @@
   (:export :subst* :struct-like-defclass :bind-class-slots :remove-plist-keys :recursive-find
 	   :recursive-map :assoc-cdr :aif :awhen :it :destructuring-case :recursive-find/collect :plist-replace
 	   :recursive-find-if :recursive-mapcar :letf :relative-file-position :group :let-values* :let-values :divisiblep
-	   :named-let :pushover :insert-before :has-sublist-p :find-sublist :recursive-find-sublist :remove-binding :mapseq))
+	   :named-let :pushover :insert-before :has-sublist-p :find-sublist :recursive-find-sublist :remove-binding :mapseq
+	   :with-file-position))
 
 (in-package :lisp-binary-utils)
 
@@ -268,10 +269,12 @@ returns NIL"
        return remaining))
 
 (defun recursive-find-if (pred tree)
-  (recursive-find nil tree
-		  :test (lambda (bullshit node)
-			  (declare (ignore bullshit))
-			  (funcall pred node))))
+  (if (funcall pred tree)
+      tree
+      (recursive-find nil tree
+		      :test (lambda (bullshit node)
+			      (declare (ignore bullshit))
+			      (funcall pred node)))))
 
 (defun mapseq (function sequence)
   (if (listp sequence)
@@ -392,3 +395,12 @@ Similar to CL-LETF in Emacs."
 	 (ending-position (max (+ starting-position offset)
 			       0)))
     (file-position stream ending-position)))
+
+(defmacro with-file-position ((position stream) &body body)
+  (let ((original-file-position (gensym)))
+    `(let ((,original-file-position (file-position ,stream)))
+       (unwind-protect
+	    (progn
+	      (file-position ,stream ,position)
+	      ,@body)
+	 (file-position ,stream ,original-file-position)))))

@@ -26,7 +26,8 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 
 	   :read-binary-type
 	   :write-binary-type
-	   
+
+	   :pad-fixed-length-string
 	   :read-terminated-string :write-terminated-string :buffer :terminated-string
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
 	 :bad-value :required-value :fixed-length-string :bit-field :open-binary :with-open-binary-file :use-string-value))
@@ -280,6 +281,15 @@ Example:
 		     (format t "Enter a value of type STRING (evaluated): ")
 		     (list (eval (read))))
       (values (flexi-streams:string-to-octets value) 0))))
+
+(defun pad-fixed-length-string (normal-string required-length &optional (padding-character #\Nul))
+  (if (> (length normal-string) required-length)
+      (subseq normal-string 0 required-length)
+      (let ((result (make-string required-length :initial-element padding-character)))
+	(loop for ch across normal-string
+	   for ix from 0 do
+	     (setf (aref result ix) ch))
+	result)))
 
 (defmethod read-binary ((type (eql 'terminated-string)) stream)
   (read-terminated-string stream))
@@ -1126,10 +1136,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 			,bytes))))
 	    (setf writer*
 		  `(write-bytes
-		    ;; FIXME: Pad the string up to the LENGTH if it is too
-		    ;;        short. Truncate or throw an exception if it
-		    ;;        is too long.
-		    (string-to-octets ,name :external-format ,external-format)
+		    (string-to-octets (pad-fixed-length-string ,name ,length) :external-format ,external-format)
 		    ,stream-symbol))
 	    '(:type string))
 	   ((type count-size &key (external-format :latin1))
