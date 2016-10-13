@@ -39,4 +39,4 @@ formats, including TIFF).
 LISP-BINARY also provides:
 
 * Primitives for reading integers, floats, and strings.
-* A bit-stream library which can be used to read as little as one bit at a time.
+* A bit-stream library which can be used to read one bit at a time.
