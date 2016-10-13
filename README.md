@@ -7,6 +7,8 @@ LISP-BINARY provides the DEFBINARY macro, with which you can declare
 the structure of some piece of binary data, whether it's a file format,
 a network protocol, or what have you.
 
+It is similar in spirit to [Binary-Types](https://github.com/frodef/binary-types) and [Kaitai Struct](https://github.com/kaitai-io/kaitai_struct).
+
 The DEFBINARY macro generates a DEFSTRUCT form to contain the data,
 and instances of the methods READ-BINARY and WRITE-BINARY, which
 read the data from a stream.
@@ -20,9 +22,9 @@ the following types of data:
 * Floating point values in IEEE half, single, double, quadruple, and octuple precision formats.
 * Enumerated types (an integer goes in the file, but all you see is a symbol)
 * Strings: NUL-terminated (or an alternative terminator if you need it), Pascal-style counted strings (preceded by an integer giving the length), and fixed-length strings. Any encoding supported by FLEXI-STREAMS is supported.
-* Arrays: Fixed-length and Pascal-style counted arrays are directly supported. The element-type can be anything you could use elsewhere in the DEFBINARY form. The length of the "fixed-length" type of array is evaluated at runtime, and can incorporate the values of
+* Arrays: Fixed-length and Pascal-style counted arrays are directly supported. The element-type can be anything you could use elsewhere in the DEFBINARY form (for example, you could have an array of NUL-terminated strings). The length of the "fixed-length" type of array is evaluated at runtime, and can incorporate the values of
 other fields.
-* Raw byte buffers. They read as integers instead of characters, and aren't subject to a character-encoding.
+* Raw byte buffers. They read as 8-bit integers instead of characters, and aren't subject to a character-encoding.
 * Offsets to data found later in the file (you see the data pointed to, not the offset).
 * Other structs declared with DEFBINARY.
 
