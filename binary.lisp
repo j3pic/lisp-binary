@@ -152,7 +152,7 @@ keywords and integer values that are expected to be found in a binary file. The 
 
 Example:
 
-    (define-enum speeds
+    (define-enum speeds 2
        slow                 ;; Implicitly 0
        light-speed          ;; Implicitly 1
        (ridiculous-speed 5) ;; Explicit value
