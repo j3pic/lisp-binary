@@ -20,7 +20,7 @@ the following types of data:
 * Strings: NUL-terminated (or an alternative terminator if you need it), Pascal-style counted strings (preceded by an integer giving the length), and fixed-length strings. Any encoding supported by FLEXI-STREAMS is supported.
 * Arrays: Fixed-length and Pascal-style counted arrays are directly supported. The element-type can be anything you could use elsewhere in the DEFBINARY form. The length of the "fixed-length" type of array is evaluated at runtime, and can incorporate the values of
 other fields.
-* Raw byte buffers. They read as integers instead of characters.
+* Raw byte buffers. They read as integers instead of characters, and aren't subject to a character-encoding.
 * Offsets to data found later in the file.
 * Other structs declared with DEFBINARY.
 
