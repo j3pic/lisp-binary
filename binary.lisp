@@ -2028,11 +2028,15 @@ TYPES
                                                :base-pointer-name foo-base
                                                :region-tag foo-region))
                  (pointer-2 0   :type (pointer :pointer-type (unsigned-byte 16)
-                                               :data-type quadruple-float)))
+                                               :data-type quadruple-float
+                                               :base-pointer-name foo-base
+                                               :region-tag foo-region)))
+ 
 
                (defbinary foo ()
                  (foo-base 0 :type base-pointer)
                  (bar nil :type bar)
+                 ;; POINTER-1 and POINTER-2 will point to this:
                  (foo-region nil :type (region-tag :base-pointer-name foo-base)))
                                                     
 
