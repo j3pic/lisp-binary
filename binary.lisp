@@ -243,11 +243,20 @@ Example:
 
 
 (defun read-counted-string (size-len stream &key (byte-order :little-endian))
+  "Reads an unsigned integer of SIZE-LEN bytes in the specified BYTE-ORDER,
+then reads a byte vector of SIZE-LEN bytes. Returns two values:
+
+1. The byte vector
+2. The total number of bytes that were read."
+
+
   (multiple-value-bind (strlen bytes-read) (read-integer size-len stream :byte-order byte-order)
     (multiple-value-bind (string bytes-read-2) (read-bytes strlen stream)
       (values string (+ bytes-read bytes-read-2)))))
 
 (defun write-counted-string (size-len stream buffer &key (byte-order :little-endian))
+  "Writes the length of the BUFFER on the STREAM as an unsigned integer of SIZE-LEN bytes in the
+specified BYTE-ORDER, then writes out the BUFFER."
   (declare (type integer size-len)
 	   (type (simple-array (unsigned-byte 8)) buffer))
   (+ (write-integer (length buffer) size-len stream :byte-order byte-order)
@@ -260,6 +269,9 @@ Example:
   (aref arr (decf (fill-pointer arr))))
 
 (defun read-terminated-string (stream &key (terminator (buffer 0)))
+  "Reads a string ending in the byte sequence specified by TERMINATOR. The TERMINATOR is
+not included in the resulting buffer. The default is to read C-style strings, terminated
+by a zero."
   (declare (type stream stream)
 	   (type (simple-array (unsigned-byte 8) (*)) terminator))
   (restart-case
@@ -841,6 +853,64 @@ have to generate code to verify that they did.")
 	     ,@outer-body))
        (otherwise node)))
    form))
+
+(defvar *virtual-types* nil)
+
+(defstruct virtual-type
+  name
+  lambda-list
+  reader
+  writer
+  lisp-type
+  (estimated-total-bits 8)
+  (stream-required :normal-stream)
+  can-be-in-bit-field)
+
+(defmacro define-virtual-type (name lambda-list reader writer lisp-type &key (estimated-total-bits 8) (stream-required :normal-stream)
+									  can-be-in-bit-field)
+  "Define a new Virtual Type.
+
+A Virtual Type is a rule that tells the LISP-BINARY how to read a particular kind of
+value from a stream, and how to write it back. The result of reading a Virtually-Typed object
+can be an object of any Lisp type. Which Lisp type the Virtual Type corresponds to must
+be specified in the LISP-TYPE argument.
+
+The same LISP-TYPE can be produced by many different Virtual Types. As a result, the LISP-BINARY
+library must always be told which type it is reading or writing. This is usually done at compile-time
+through the DEFBINARY macro.
+
+The READER and WRITER must be functions.
+
+The READER accepts a STREAM argument and returns two values:
+
+   1. The fully-processed value that was read.
+   2. The number of bytes that were read from the STREAM. If the STREAM is a BIT-STREAM,
+      then the number of bytes can be fractional, to indicate how much was read down to
+      the bit. 1/8 of a byte = 1 bit.
+
+The WRITER accepts the lambda list (OBJ STREAM), where OBJ is the value to be written. It
+returns the number of bytes that were written.
+
+
+"
+  (pushover (make-virtual-type :name name :lambda-list lambda-list
+			       :reader reader :writer writer :lisp-type lisp-type
+			       :estimated-total-bits estimated-total-bits
+			       :stream-required stream-required
+			       :can-be-in-bit-field can-be-in-bit-field)
+	    *virtual-types* :key #'virtual-type-name)
+  `',name)
+
+(defun build-virtual-type-reader/writer-expander (expression-form value-name stream-symbol)
+  (alexandria:with-gensyms (type-name)
+  `(destructuring-case ,expression-form
+     ,@(loop for type in *virtual-types*
+	  collect `((,type-name ,@(virtual-type-lambda-list type))
+		    :where (eq ,type-name ,(virtual-type-name type))
+		    (values `(funcall ,,(virtual-type-reader type) ,,stream-symbol)
+			    `(funcall ,,(virtual-type-writer type) ,,value-name ,,stream-symbol)
+			    `(:type ,,(virtual-type-lisp-type type)))))
+     (otherwise (error "Unknown virtual type: ~S" ',expression-form)))))
 
 (defun remove-impossible-error-checks (form)
   (recursive-mapcar
