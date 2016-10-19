@@ -187,10 +187,6 @@
 				   (write-integer (- real-offset tiff-base-pointer) 4 stream :byte-order *byte-order*)
 				   (setf first-image-file-directory-offset (- real-offset tiff-base-pointer))
 				   (file-position stream real-offset)
-				   ;; FIXME: This is writing something incorrectly. I'm getting errors when
-				   ;;        trying to read it back in. I've determined that everything
-				   ;;        is being written correctly up until this point. Then it all
-				   ;;        goes pear-shaped.
 				   (loop for (dir . more-dirs) on image-directories sum
 					(let ((bytes (write-binary dir stream))
 					      (new-eof (file-position stream)))
@@ -237,6 +233,7 @@
 
 
 (defbinary jpeg-generic-segment (:byte-order :big-endian)
+  (file-position 0 :type file-position)
   (tag nil :type jpeg-generic-tag)
   (contents nil :type (eval
 		       (cond ((= (slot-value tag 'code) 225)
@@ -252,7 +249,9 @@
 			 `(simple-array (unsigned-byte 8) (,(- (slot-value tag 'length) 8))))))
   (file-positioner nil :type (custom :reader
 				     (lambda (stream)
-				       (declare (ignore stream))
+				       ;;  FIXME: After reading a TIFF segment, it is necessary
+				       ;;  to position the file cursor because of all the
+				       ;;  pointers.
 				       (values nil 0))
 				     :writer
 				     (lambda (obj stream)
