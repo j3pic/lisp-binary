@@ -171,7 +171,7 @@ Example:
 									     (setf val (car val))
 									  collect `(cons ',val ,(incf counter))))))))
        (setf (gethash ',name *enum-definitions*) definition)
-       ',name)))
+       (deftype ,name () 'symbol))))
 
 (define-condition bad-enum-value (simple-error) (integer-value symbol-value enum-name))
 (define-condition bad-magic-value (simple-error) (bad-value required-value))
@@ -1067,7 +1067,15 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 				       ,@(if validator
 					     `((funcall ,validator ,pointer-value)))
 				       (with-file-position (,pointer-value ,stream-symbol)
-					 (values ,data-reader ,pointer-bytes-read)))))
+					 (restart-case 
+					     (values ,data-reader ,pointer-bytes-read)
+					   (use-value (value)
+					     :report ,(format t "Provide a value of type ~S" `',data-type)
+					     :interactive (lambda ()
+							    (format t "Enter a value of type ~S: " `',data-type)
+							    (force-output)
+							    (list (eval (read))))
+					     (values value 0)))))))
 		    (setf writer* (alexandria:with-gensyms (closure)
 				    `(let ((,closure (lambda (,name ,stream-symbol)
 						       ,data-writer)))
