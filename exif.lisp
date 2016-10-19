@@ -249,10 +249,12 @@
 			 `(simple-array (unsigned-byte 8) (,(- (slot-value tag 'length) 8))))))
   (file-positioner nil :type (custom :reader
 				     (lambda (stream)
-				       ;;  FIXME: After reading a TIFF segment, it is necessary
-				       ;;  to position the file cursor because of all the
-				       ;;  pointers.
-				       (values nil 0))
+				       (values
+					(and (not (jpeg-tag-no-length-p tag))
+					     (file-position stream
+							    (+ (slot-value tag 'length-offset)
+							       (slot-value tag 'length))))
+					0))
 				     :writer
 				     (lambda (obj stream)
 				       (declare (ignore obj))
