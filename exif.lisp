@@ -162,40 +162,40 @@
 			 :value 42))
   (offset-ptr 0 :type file-position)
   (first-image-file-directory-offset 0 :type (unsigned-byte 32))
-  (image-directories nil :type list
-		     :reader (lambda (stream)
-			       (let* ((next-directory nil)
-				      (byte-count 0)
-				      (directories
-				       (with-file-position (0 stream)
-					 (loop for offset = first-image-file-directory-offset
-					    then (slot-value next-directory 'next-directory-offset)
-					    until (= offset 0)
-					    collect (progn
-						      (file-position stream (+ offset tiff-base-pointer))
-						      (setf next-directory
-							    (multiple-value-bind (dir bytes)
-								(read-binary 'tiff-image-file-directory stream)
-							      (incf byte-count bytes)
-							      dir)))))))
-				 (values directories byte-count)))
-		     :writer (lambda (obj stream)
-			       (declare (ignore obj))
-			       (force-output stream)
-			       (let ((real-offset (file-length stream)))
-				 (with-file-position (offset-ptr stream)
-				   (write-integer (- real-offset tiff-base-pointer) 4 stream :byte-order *byte-order*)
-				   (setf first-image-file-directory-offset (- real-offset tiff-base-pointer))
-				   (file-position stream real-offset)
-				   (loop for (dir . more-dirs) on image-directories sum
-					(let ((bytes (write-binary dir stream))
-					      (new-eof (file-position stream)))
+  (image-directories nil :type (custom
+				:reader (lambda (stream)
+					  (let* ((next-directory nil)
+						 (byte-count 0)
+						 (directories
+						  (with-file-position (0 stream)
+						    (loop for offset = first-image-file-directory-offset
+						       then (slot-value next-directory 'next-directory-offset)
+						       until (= offset 0)
+						       collect (progn
+								 (file-position stream (+ offset tiff-base-pointer))
+								 (setf next-directory
+								       (multiple-value-bind (dir bytes)
+									   (read-binary 'tiff-image-file-directory stream)
+									 (incf byte-count bytes)
+									 dir)))))))
+					    (values directories byte-count)))
+				:writer (lambda (obj stream)
+					  (declare (ignore obj))
 					  (force-output stream)
-					  (file-position stream (- new-eof 4))
-					  (write-integer (if more-dirs
-							     (- new-eof tiff-base-pointer)
-							     0) 4 stream :byte-order *byte-order*)
-					  bytes))))))
+					  (let ((real-offset (file-length stream)))
+					    (with-file-position (offset-ptr stream)
+					      (write-integer (- real-offset tiff-base-pointer) 4 stream :byte-order *byte-order*)
+					      (setf first-image-file-directory-offset (- real-offset tiff-base-pointer))
+					      (file-position stream real-offset)
+					      (loop for (dir . more-dirs) on image-directories sum
+						   (let ((bytes (write-binary dir stream))
+							 (new-eof (file-position stream)))
+						     (force-output stream)
+						     (file-position stream (- new-eof 4))
+						     (write-integer (if more-dirs
+									(- new-eof tiff-base-pointer)
+									0) 4 stream :byte-order *byte-order*)
+						     bytes)))))))
   (tiff-region 0 :type (region-tag :base-pointer-name 'tiff-base-pointer)))
 				    
 
