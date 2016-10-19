@@ -646,7 +646,7 @@ bindings of all the relevant special variables."
 
 (defun get-base-pointer-tag (tag)
   (or
-   (cdr (assoc tag *base-pointer-tags*))) 0)
+   (cdr (assoc tag *base-pointer-tags*)) 0))
 
 ;; One difficult thing to do is handle offsets within files. Some
 ;; file formats specify entire tables of offsets in the middle of
@@ -756,6 +756,7 @@ bindings of all the relevant special variables."
 							      (:write '(inject runtime-writer)))))))))
        
 
+
 (defun read-binary-type (type stream &key (byte-order :little-endian) align element-align)
   "Read a value of type TYPE from the STREAM. TYPE is any type supported by the DEFBINARY macro."
   (read/write-binary-type :read type stream :byte-order byte-order
@@ -768,6 +769,8 @@ DEFBINARY macro."
 			  :value value
 			  :align align :element-align element-align))
 
+
+(declaim (inline read-binary-type write-binary-type))
 
 (defparameter debug-data nil)
 
