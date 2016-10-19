@@ -107,6 +107,12 @@ to that function should match the one given to this function."))
     (values result (read-sequence result stream))))
 	       
 (defun read-integer (length stream &key (byte-order :little-endian) signed)
+  "Reads an integer of LENGTH bytes from the STREAM in the specified BYTE-ORDER.
+
+If SIGNED is non-NIL, the number is interpreted as being in two's complement format.
+
+If the STREAM is a BIT-STREAM, then the LENGTH doesn't have to be an integer."
+  
   (multiple-value-bind (bytes bytes-read) (read-bytes length stream)
     (let ((bytes (if (integerp bytes-read)
 		     bytes

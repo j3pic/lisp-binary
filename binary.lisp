@@ -628,7 +628,6 @@ to the OFFSET-POSITION at that time."
     (if (get-tag tag)
 	(dump-tag tag base-pointer stream (+ bytes-written previous-result))
 	(+ previous-result bytes-written))))
-	
 
 (defvar *base-pointer-tags* nil)
 
@@ -768,55 +767,6 @@ DEFBINARY macro."
   (read/write-binary-type :write type stream :byte-order byte-order
 			  :value value
 			  :align align :element-align element-align))
-
-(defun expand-defbinary-eval-type (struct-name type-info)
-  (declare (type defbinary-type type-info)
-	   (optimize (safety 3)))
-  (bind-class-slots defbinary-type type-info
-    (let ((expr (cadr type)))
-      ;; Runtime type determination based on a user-provided form. The user-provided form must
-      ;; be evaluated at runtime, and then its value must be expanded at runtime in order to
-      ;; determine how to read it. The expansion will produce a reader and writer that must be
-      ;; EVAL'd into existence during the read and write processes.
-      (let ((stream (gensym))
-	    (value (gensym))
-	    (reader/writer (gensym))
-	    (runtime-reader (gensym))
-	    (runtime-writer (gensym))
-	    (irrelevant (gensym))
-	    (type (gensym))
-	    (struct-name-binding '#:struct-name-binding))
-	(let ((reader/writer-form
-	       (subst* `((defbinary-eval-stream ,stream)
-			 (previous-defs-symbol ,previous-defs-symbol)
-			 (byte-count-binding ,byte-count-name))
-		       `(let ((,type ,expr))
-			  (multiple-value-bind (,irrelevant ,runtime-reader ,runtime-writer)
-			      (expand-defbinary-type-field ',struct-name
-			       (make-instance 'defbinary-type
-					      :name ',name
-					      :type ,type
-					      :byte-order ,byte-order
-					      :reader ,reader
-					      :writer ,writer
-					      :stream-symbol 'defbinary-eval-stream
-					      :previous-defs-symbol `previous-defs-symbol
-					      :byte-count-name ',byte-count-name
-					      :align ,align
-					      :element-align ,element-align
-					      :bind-index-to ',bind-index-to))
-			    (declare (ignorable ,irrelevant ,runtime-reader ,runtime-writer))
-			    (eval (runtime-reader/writer-form ,reader/writer ',byte-count-name ,byte-count-name
-								  ',stream ,stream-symbol `previous-defs-symbol)))))))
-	  (values 
-	   '(:type t)
-	   (subst* `((,reader/writer ,runtime-reader)
-		     (,struct-name-binding nil)
-		     ((,value ,name) (,value nil))
-		     (defbinary-eval-stream ,stream)) reader/writer-form :test #'equalp)
-	   (subst* `((,reader/writer ,runtime-writer)
-		     (,struct-name-binding ((,struct-name ,(list 'inject struct-name))))
-		     (defbinary-eval-stream ,stream)) reader/writer-form)))))))
 
 
 (defparameter debug-data nil)
@@ -978,25 +928,16 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
   (declare (type defbinary-type type-info)
 	   (optimize (safety 3) (debug 3) (speed 0)))
   (bind-class-slots defbinary-type type-info
-    (declare (ignore previous-defs-symbol align bind-index-to)
+    (declare (ignore previous-defs-symbol bind-index-to)
 	     (type symbol byte-count-name))
     (block this-function
       (let ((reader* nil)
 	    (writer* nil)
-	    (read-pointer-resolver nil)
-	    (write-pointer-resolver nil)
+	    (read-pointer-resolver nil)  ;; These are obsolescent values that were
+	    (write-pointer-resolver nil) ;; supposed to be bubbled up the call stack.
 	    (type (if (listp type)
 		      type
 		      (list type))))
-	;; FIXME: I recently added two values to the return type of
-	;;        EXPAND-DEFBINARY-FIELD-TYPE. However, this function
-	;;        calls itself in several places, and only binds
-	;;        the original three values. All that code is broken if
-	;;        we want to support offsets!
-	;;
-	;;        Also, EXPAND-DEFBINARY-EVAL-TYPE not only can't
-	;;        receive the two extra values, it also wouldn't be
-	;;        able to do anything with them if it could!
 	(values
 	 ;; All supported types are represented as patterns in this
 	 ;; DESTRUCTURING-CASE form. 
@@ -1392,9 +1333,13 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 								(subst* `((,name-one (aref ,name ,ix))) write-one) nil))))
 			       ,local-byte-count))
 		      `(:type (simple-array ,(cadr defstruct-type)))))))))
-	   ((type-name &rest _) :where (eq type-name 'eval)
-	    (return-from this-function
-	      (expand-defbinary-eval-type struct-name type-info)))
+	   ((type-name type-generating-form) :where (eq type-name 'eval)
+	    (setf reader* `(read-binary-type ,type-generating-form ,stream-symbol :byte-order ,byte-order
+					     :align ,align :element-align ,element-align))
+	    (setf writer* `(write-binary-type ,name ,type-generating-form ,stream-symbol
+					      :byte-order ,byte-order :align ,align
+					      :element-align ,element-align))
+	    '(:type t))
 	   ((byte-type bits) :where (member byte-type '(unsigned-byte signed-byte))
 	      (setf reader* `(read-integer ,(/ bits 8) ,stream-symbol
 					   :byte-order ,byte-order
