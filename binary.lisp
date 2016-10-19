@@ -558,7 +558,8 @@ that would normally be bound must be added with a LET form."
   (offset-size/bytes 0 :type number)
   (offset-byte-order :little-endian :type keyword)
   (offset-signedness nil :type boolean)
-  (buffer-to-store #()))
+  (data-to-store nil)
+  (closure #'identity :type function))
 
 (defvar *queued-pointers* nil)
 
@@ -601,28 +602,33 @@ of WRITE-BINARY that might have the corresponding DUMP-TAG call."
 (defun get-tag (tag)
   (cdr (assoc tag *queued-pointers*)))
 
-(defun queue-write-pointer (tag offset-position offset-size/bytes offset-byte-order offset-signedness buffer)
-  "Queue some data to be written at a later time, and for its address to be written to the OFFSET-POSITION at
-that time."
+(defun queue-write-pointer (tag offset-position offset-size/bytes offset-byte-order offset-signedness data-to-store closure)
+  "Queue some data along with a closure to write it at a later time, and arrange for its address to be written
+to the OFFSET-POSITION at that time."
   (push-to-tag (make-out-pointer
 		:offset-position offset-position
 		:offset-size/bytes offset-size/bytes
 		:offset-byte-order offset-byte-order
 		:offset-signedness offset-signedness
-		:buffer-to-store buffer)
+		:data-to-store data-to-store
+		:closure closure)
 	       tag))
 
-(defun dump-tag (tag base-pointer stream)
-  (prog1
-      (loop for out-pointer in (get-tag tag)
-	 for offset = (- (file-position stream) base-pointer)
-	 sum (with-slots (offset-position offset-size/bytes offset-byte-order offset-signedness
-					  buffer-to-store) out-pointer
-	       (with-file-position (offset-position stream)
-		 (write-integer offset offset-size/bytes stream :byte-order offset-byte-order
-				:signed offset-signedness))
-	       (write-bytes buffer-to-store stream)))
-    (clear-tag tag)))
+(defun dump-tag (tag base-pointer stream &optional (previous-result 0))
+  (let* ((tag-contents (prog1 (get-tag tag)
+			 (clear-tag tag)))
+	 (bytes-written (loop for out-pointer in tag-contents
+			   for offset = (- (file-position stream) base-pointer)
+			   sum (with-slots (offset-position offset-size/bytes offset-byte-order offset-signedness
+							    data-to-store closure) out-pointer
+				 (with-file-position (offset-position stream)
+				   (write-integer offset offset-size/bytes stream :byte-order offset-byte-order
+						  :signed offset-signedness))
+				 (funcall closure data-to-store stream)))))
+    (if (get-tag tag)
+	(dump-tag tag base-pointer stream (+ bytes-written previous-result))
+	(+ previous-result bytes-written))))
+	
 
 (defvar *base-pointer-tags* nil)
 
@@ -640,7 +646,8 @@ bindings of all the relevant special variables."
   (push (cons tag pointer) *base-pointer-tags*))
 
 (defun get-base-pointer-tag (tag)
-  (cdr (assoc tag *base-pointer-tags*)))
+  (or
+   (cdr (assoc tag *base-pointer-tags*))) 0)
 
 ;; One difficult thing to do is handle offsets within files. Some
 ;; file formats specify entire tables of offsets in the middle of
@@ -799,9 +806,8 @@ DEFBINARY macro."
 					      :element-align ,element-align
 					      :bind-index-to ',bind-index-to))
 			    (declare (ignorable ,irrelevant ,runtime-reader ,runtime-writer))
-			    (eval `(let ,,struct-name-binding
-				     ,(runtime-reader/writer-form ,reader/writer ',byte-count-name ,byte-count-name
-								  ',stream ,stream-symbol `previous-defs-symbol))))))))
+			    (eval (runtime-reader/writer-form ,reader/writer ',byte-count-name ,byte-count-name
+								  ',stream ,stream-symbol `previous-defs-symbol)))))))
 	  (values 
 	   '(:type t)
 	   (subst* `((,reader/writer ,runtime-reader)
@@ -931,6 +937,8 @@ returns the number of bytes that were written.
 	`(multiple-value-bind ,bindings (,function-name ,@function-arguments)
 	   ,@body))
        (otherwise node))) form))
+
+(defvar *outer-stream-file-position* 0)
 
 (defun expand-defbinary-type-field (struct-name type-info)
   "Expands the :TYPE field of a DEFBINARY form. Returns three values:
@@ -1072,7 +1080,8 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 			     (add-base-pointer-tag ',name file-position)
 			     (values file-position 0)))
 	    (setf writer* `(progn
-			     (add-base-pointer-tag ',name (file-position ,stream-symbol))
+			     (setf ,name (file-position ,stream-symbol))
+			     (add-base-pointer-tag ',name ,name)
 			     0))
 	    '(:type t))
 	   ((type)
@@ -1090,7 +1099,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 						0) ,stream-symbol))
 	    (push name *ignore-on-write*)
 	    '(:type t))
-	   ((type &key pointer-type data-type base-pointer-name region-tag)
+	   ((type &key pointer-type data-type base-pointer-name region-tag validator)
 	    :where (eq type 'pointer)
 	    (letf (((slot-value type-info 'type) pointer-type))
 	      (multiple-value-bind (pointer-defstruct-type pointer-reader pointer-writer)
@@ -1111,13 +1120,13 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 								   ,pointer-reader
 								 (setf ,pointer-bytes-read ,pbr2)
 								 ,pv2))))
+				       ,@(if validator
+					     `((funcall ,validator ,pointer-value)))
 				       (with-file-position (,pointer-value ,stream-symbol)
 					 (values ,data-reader ,pointer-bytes-read)))))
-		    (setf writer* (alexandria:with-gensyms (buffer sequence-stream)
-				    `(let ((,buffer (flexi-streams:with-output-to-sequence (,sequence-stream)
-						      ,(subst*
-							`((,stream-symbol ,sequence-stream))
-							data-writer))))
+		    (setf writer* (alexandria:with-gensyms (closure)
+				    `(let ((,closure (lambda (,name ,stream-symbol)
+						       ,data-writer)))
 				       (queue-write-pointer ,region-tag (file-position ,stream-symbol)
 							    ;; Trying to figure out the size, byte order, and
 							    ;; signedness of the pointer by analyzing the code
@@ -1157,7 +1166,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 														  nil
 														  t))))
 										       (list size byte-order signedness)))))
-							    ,buffer)
+							    ,name ,closure)
 				       (let ((,name 0))
 					 ,pointer-writer))))
 		    defstruct-type)))))
@@ -2461,36 +2470,35 @@ FLOATING-POINT NUMBERS
 						 t)
 						(otherwise nil))
 					    collect (binary-field-name field))))
-		 (let-defs (loop for f in (mapcar #'binary-field-name
-						  fields)
-			      if (listp f)
-			      append (loop for real-name in f
-					collect `(,real-name (slot-value ,name ',real-name)))
-			      else collect `(,f (slot-value ,name ',f)))))
-		`(let* ,(list* `(,byte-count-name 0)
-			       '(*byte-order* *byte-order*)
-			       let-defs)
-		   ,@(if ignore-decls
-			 `((declare (ignorable ,@ignore-decls))))
-		   ,@(loop for (stream-name . body)
-			in (group-write-forms (cons stream-symbol
-						    (remove nil (mapcar #'binary-field-bit-stream-id fields)))
-			    (loop for processed-write-form in
-				 (loop for write-form in (mapcar #'binary-field-write-form fields)
-				    when (recursive-find 'eval write-form)
-				    collect (let ((fixed-let-defs (loop for (var val) in let-defs collect
-								       (CONS VAR (CONS VAL 'NIL)))))
-					      (subst* `((,previous-defs-symbol ,fixed-let-defs))
-						      write-form))
-				    else collect write-form)
-			       collect `(incf ,byte-count-name ,processed-write-form)))
-			collect `(,@(if (eq stream-name stream-symbol)
-					'(progn)
-					`(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
-										   :byte-order ,byte-order)))
-					   ,@body))
+		   (slots (loop for f in (mapcar #'binary-field-name
+						 fields)
+			     if (listp f)
+			     append f
+			     else collect f)))
+		`(let* ,(list `(,byte-count-name 0)
+			      '(*byte-order* *byte-order*))
+		   (with-slots ,slots ,name
+		     ,@(if ignore-decls
+			   `((declare (ignorable ,@ignore-decls))))
+		     ,@(loop for (stream-name . body)
+			  in (group-write-forms (cons stream-symbol
+						      (remove nil (mapcar #'binary-field-bit-stream-id fields)))
+						(loop for processed-write-form in
+						     (loop for write-form in (mapcar #'binary-field-write-form fields)
+							when (recursive-find 'eval write-form)
+							collect (let ((fixed-let-defs (loop for var in slots collect
+											   (CONS VAR (CONS (list 'inject VAR) 'NIL)))))
+								  (subst* `((,previous-defs-symbol ,fixed-let-defs))
+									  write-form))
+							else collect write-form)
+						   collect `(incf ,byte-count-name ,processed-write-form)))
+			  collect `(,@(if (eq stream-name stream-symbol)
+					  '(progn)
+					  `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
+										     :byte-order ,byte-order)))
+				      ,@body))
 				       
-		   ,byte-count-name)))
+		     ,byte-count-name))))
 	,@(when export
 		`((export ',name)
 		  (export ',(defbinary-constructor-name name defstruct-options))
