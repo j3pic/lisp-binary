@@ -97,9 +97,10 @@
 			      (<= count 4))
 			 (tiff-type->defbinary-type :ascii))
 			((or (and (member type '(:signed-byte :unsigned-byte))
-				  (<= count 4))
+				  (<= count 4)
+				  (> count 1))
 			     (and (member type '(:signed-short :unsigned-short))
-				  (<= count 2)))
+				  (= count 2)))
 			 `(simple-array ,(tiff-type->defbinary-type type)
 					(,count)))
 			((> count 1)
@@ -220,20 +221,20 @@
 				   '(unsigned-byte 32)
 				   'null))))
 
+(defvar *exif-header* #x457869660000)
+
 (defbinary jpeg-app1-body (:byte-order :big-endian)
   (exif-header 0 :type (unsigned-byte 48))
-  (body nil :type (eval (if (= exif-header #x457869660000)
+  (body nil :type (eval (if (= exif-header *exif-header*)
 			    'tiff
-			    ;; FIXME!!! We need the LENGTH found just
-			    ;; before this structure to create a type
-			    ;; that reads the whole thing!
-			    `(unsigned-byte 8)))))
+			    'null))))
 
 (defun jpeg-tag-no-length-p (tag)
   (or (member (slot-value tag 'code)
 	      '(#xd8 #xd0 #xd1 #xd2 #xd3 #xd4 #xd5 #xd6 #xd7
 		#xd9 #xdd))
       (not (slot-value tag 'length))))
+
 
 (defbinary jpeg-generic-segment (:byte-order :big-endian)
   (tag nil :type jpeg-generic-tag)
@@ -243,6 +244,12 @@
 			     ((null (slot-value tag 'length))
 			      'null)
 			     (t `(simple-array (unsigned-byte 8) (,(- (slot-value tag 'length) 2)))))))
+  (buffer nil :type (eval
+		     (if (or (and (jpeg-app1-body-p contents)
+				  (tiff-p (slot-value contents 'body)))
+			     (jpeg-tag-no-length-p tag))
+			 'null
+			 `(simple-array (unsigned-byte 8) (,(- (slot-value tag 'length) 8))))))
   (file-positioner nil :type (custom :reader
 				     (lambda (stream)
 				       (declare (ignore stream))
@@ -255,7 +262,7 @@
 					       (with-file-position ((slot-value tag 'length-offset) stream)
 						 (write-integer (- end-position (slot-value tag 'length-offset))
 								2 stream :byte-order :big-endian)))
-					     0)))))
+					   0)))))
 							    
 
 (defun read-rest-of-stream (stream)
