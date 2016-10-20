@@ -149,7 +149,10 @@ copy it into the Lisp array afterwards, which is suboptimal."
 (defmethod stream-finish-output ((stream bit-stream))
   (unless (or (not (eq (slot-value stream 'last-op) :write))
 	      (= (slot-value stream 'bits-left) 0))
-    (real-write-byte (slot-value stream 'last-byte)
+    (real-write-byte (ecase (slot-value stream 'byte-order)
+		       (:little-endian (slot-value stream 'last-byte))
+		       (:big-endian (ash (slot-value stream 'last-byte)
+					 (- 8 (slot-value stream 'bits-left)))))
 		     (slot-value stream 'real-stream))
     (finish-output (slot-value stream 'real-stream))))
 
