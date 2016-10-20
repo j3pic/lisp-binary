@@ -120,8 +120,8 @@ copy it into the Lisp array afterwards, which is suboptimal."
 					(slot-value stream 'last-byte))))
 	 (setf (slot-value stream 'bits-left) 0)
 	 (logior
-	  (ash remaining-bits bits-left)
-	  (read-partial-byte/big-endian (- bits remaining-bits) stream))))))
+	  (ash remaining-bits (- bits bits-left))
+	  (read-partial-byte/big-endian (- bits bits-left) stream))))))
 
 (defun read-partial-byte/little-endian (bits stream)
     (cond
