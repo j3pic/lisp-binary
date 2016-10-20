@@ -27,6 +27,9 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :read-binary-type
 	   :write-binary-type
 
+	   :wrap-in-bit-stream
+	   :with-wrapped-in-bit-stream
+
 	   :pad-fixed-length-string
 	   :read-terminated-string :write-terminated-string :buffer :terminated-string
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
@@ -1064,18 +1067,19 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 								   ,pointer-reader
 								 (setf ,pointer-bytes-read ,pbr2)
 								 ,pv2))))
-				       ,@(if validator
-					     `((funcall ,validator ,pointer-value)))
-				       (with-file-position (,pointer-value ,stream-symbol)
-					 (restart-case 
-					     (values ,data-reader ,pointer-bytes-read)
-					   (use-value (value)
-					     :report ,(format t "Provide a value of type ~S" `',data-type)
-					     :interactive (lambda ()
-							    (format t "Enter a value of type ~S: " `',data-type)
-							    (force-output)
-							    (list (eval (read))))
-					     (values value 0)))))))
+				       (restart-case
+					   (progn
+					     ,@(if validator
+						   `((funcall ,validator ,pointer-value)))
+					     (with-file-position (,pointer-value ,stream-symbol)
+					       (values ,data-reader ,pointer-bytes-read)))
+					 (use-value (value)
+					   :report ,(format nil "Provide a value of type ~S" data-type)
+					   :interactive (lambda ()
+							  (format t "Enter a value of type ~S: " ',data-type)
+							  (force-output)
+							  (list (eval (read))))
+					   (values value 0))))))
 		    (setf writer* (alexandria:with-gensyms (closure)
 				    `(let ((,closure (lambda (,name ,stream-symbol)
 						       ,data-writer)))
@@ -1124,8 +1128,15 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		    defstruct-type)))))
 	   ((type &key (actual-type '(unsigned-byte 16)) (value 0))
 	    :where (eq type 'magic)
+	    (if (and (listp actual-type)
+		     (eq (car actual-type) 'quote))
+		(restart-case
+		    (error ":ACTUAL-TYPE ~S should not be quoted" actual-type)
+		  (unquote-it ()
+		    :report "Well, unquote it, then!"
+		    (setf actual-type (cadr actual-type)))))
 	    (letf (((slot-value type-info 'type)
-		    actual-type))
+		    actual-type))	      
 	      (multiple-value-bind (defstruct-type reader writer)
 		  (expand-defbinary-type-field struct-name type-info)
 		(setf reader (let ((v (gensym))
