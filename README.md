@@ -7,7 +7,7 @@ LISP-BINARY provides the DEFBINARY macro, with which you can declare
 the structure of some piece of binary data, whether it's a file format,
 a network protocol, or what have you.
 
-It is similar in spirit to [Binary-Types](https://github.com/frodef/binary-types) and [Kaitai Struct](https://github.com/kaitai-io/kaitai_struct).
+It is similar in spirit to [Binary-Types](https://github.com/frodef/binary-types) and [Kaitai Struct](https://github.com/kaitai-io/kaitai_struct), but more powerful.
 
 The DEFBINARY macro generates a DEFSTRUCT form to contain the data,
 and instances of the methods READ-BINARY and WRITE-BINARY, which
