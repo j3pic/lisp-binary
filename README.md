@@ -31,6 +31,8 @@ It is similar in spirit to [Binary-Types](https://github.com/frodef/binary-types
                                           :direction :output
                                           :if-exists :supersede)
             (with-wrapped-in-bit-stream (out out-raw :byte-order :big-endian)
+              ;; Notice the lack of a compression algorithm. The compression is done
+              ;; entirely by the bit stream and the buffer's 7-bit element-type.
               (write-binary (make-compressed-text :n-chars file-size
                                                   :buffer (make-array file-size
                                                                       :element-type '(unsigned-byte 7)
