@@ -9,6 +9,47 @@ a network protocol, or what have you.
 
 It is similar in spirit to [Binary-Types](https://github.com/frodef/binary-types) and [Kaitai Struct](https://github.com/kaitai-io/kaitai_struct), but more powerful.
 
+## Quick demo:
+
+    (defpackage :instant-compressor
+      (:use :common-lisp :lisp-binary)
+      (:documentation "A file compressor written in 20 minutes. 7-bit ASCII only."))
+    
+    (defbinary compressed-text ()
+      (magic "IZ" :type (magic :actual-type (terminated-string 1)
+                                :value "IZ"))
+      (n-chars 0 :type (unsigned-byte 32))
+      (buffer 0 :type (simple-array (unsigned-byte 7) (n-chars))))
+    
+    
+    (defun compress-file (in-filename out-filename)
+      (with-open-binary-file (in in-filename
+                                 :direction :input)
+        (let* ((file-size (file-length in))
+               (buffer (read-bytes file-size in)))
+          (with-open-binary-file (out-raw out-filename
+                                          :direction :output
+                                          :if-exists :supersede)
+            (with-wrapped-in-bit-stream (out out-raw :byte-order :big-endian)
+              ;; Notice the lack of a compression algorithm. The compression is done
+              ;; entirely by the bit stream and the buffer's 7-bit element-type.
+              (write-binary (make-compressed-text :n-chars file-size
+                                                  :buffer (make-array file-size
+                                                                      :element-type '(unsigned-byte 7)
+                                                                      :initial-contents (coerce buffer 'list)))
+                            out))))))
+        
+    (defun decompress-file (in-filename out-filename)
+      (with-open-binary-file (in-raw in-filename
+                                 :direction :input)
+        (with-wrapped-in-bit-stream (in in-raw :byte-order :big-endian)
+          (with-open-binary-file (out out-filename
+                                      :direction :output
+                                      :if-exists :supersede)
+            (write-bytes (slot-value (read-binary 'compressed-text in) 'buffer) out)))))
+   
+
+
 The DEFBINARY macro generates a DEFSTRUCT form to contain the data,
 and instances of the methods READ-BINARY and WRITE-BINARY, which
 read the data from a stream.
