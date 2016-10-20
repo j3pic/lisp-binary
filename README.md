@@ -22,7 +22,7 @@ It is similar in spirit to [Binary-Types](https://github.com/frodef/binary-types
       (buffer 0 :type (simple-array (unsigned-byte 7) (n-chars))))
     
     
-    (defun compress-file (in-filenmae out-filename)
+    (defun compress-file (in-filename out-filename)
       (with-open-binary-file (in in-filename
                                  :direction :input)
         (let* ((file-size (file-length in))
