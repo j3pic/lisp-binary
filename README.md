@@ -45,13 +45,7 @@ It is similar in spirit to [Binary-Types](https://github.com/frodef/binary-types
                                       :direction :output
                                       :if-exists :supersede)
             (write-bytes (slot-value (read-binary 'compressed-text in) 'buffer) out)))))
-    
-    (defun read-file (in-filename)
-      (with-open-binary-file (in-raw in-filename
-                                 :direction :input)
-        (with-wrapped-in-bit-stream (in in-raw :byte-order :big-endian)
-            (read-binary 'compressed-text in))))
-
+   
 
 
 The DEFBINARY macro generates a DEFSTRUCT form to contain the data,
