@@ -13,7 +13,7 @@ It is similar in spirit to [Binary-Types](https://github.com/frodef/binary-types
 
     (defpackage :instant-compressor
       (:use :common-lisp :lisp-binary)
-      (:documentation "A file compressor written in 20 minutes (plus the time it took to fix the library bug that was exposed). 7-bit ASCII only."))
+      (:documentation "A file compressor written in 20 minutes. 7-bit ASCII only."))
     
     (defbinary compressed-text ()
       (magic "IZ" :type (magic :actual-type (terminated-string 1)
