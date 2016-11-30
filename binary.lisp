@@ -33,7 +33,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :pad-fixed-length-string
 	   :read-terminated-string :write-terminated-string :buffer :terminated-string
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
-	 :bad-value :required-value :fixed-length-string :bit-field :open-binary :with-open-binary-file :use-string-value))
+	 :bad-value :required-value :fixed-length-string :fixed-string :bit-field :open-binary :with-open-binary-file :use-string-value))
 	 
 (in-package :lisp-binary)
 
@@ -371,7 +371,7 @@ Returns three values:
        (declare (ignore can-be-in-bitstream))
        (values size nil stream-type)))
     ((type length &rest who-cares)
-     :where (eq type 'fixed-length-string)
+     :where (member type '(fixed-length-string fixed-string))
      (declare (ignore who-cares))
      (values (* length 8) nil :normal-stream))
     ((type count-size &rest crap)
@@ -896,6 +896,8 @@ returns the number of bytes that were written.
 
 (defvar *outer-stream-file-position* 0)
 
+(defvar *type-info-objects* nil)
+
 (defun expand-defbinary-type-field (struct-name type-info)
   "Expands the :TYPE field of a DEFBINARY form. Returns three values:
      1. A :TYPE specifier that can be spliced into a slot definition in a DEFSTRUCT form.
@@ -1395,8 +1397,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	    (setf reader* `(progn (values nil 0)))
 	    (setf writer* `(progn 0))
 	    `(:type t))
-	   ((&rest nothing)
-	    :where (null nothing)
+	   (nil
 	    (let ((new-type
 		   (restart-case
 		       (error (format nil "DEFBINARY error: No type specified for ~a. Reading and Writing won't work" name))
@@ -1474,7 +1475,9 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 				`(write-binary ,name ,stream-symbol))))
 	    `(:type ,(if (gethash type *enum-definitions*)
 			 'symbol
-			 type))))
+			 type)))
+	   ((type &rest something)
+	    (error "Unable to generate a reader or writer for unknown type ~S" (slot-value type-info 'type))))
 	 (if reader
 	     `(funcall ,reader ,stream-symbol)
 	     reader*)
