@@ -31,6 +31,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :with-wrapped-in-bit-stream
 
 	   :pad-fixed-length-string
+	   :input-string-too-long
 	   :read-terminated-string :write-terminated-string :buffer :terminated-string
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
 	 :bad-value :required-value :fixed-length-string :fixed-string :bit-field :open-binary :with-open-binary-file :use-string-value))
@@ -297,14 +298,71 @@ by a zero."
 		     (list (eval (read))))
       (values (flexi-streams:string-to-octets value) 0))))
 
-(defun pad-fixed-length-string (normal-string required-length &optional (padding-character #\Nul))
-  (if (> (length normal-string) required-length)
-      (subseq normal-string 0 required-length)
-      (let ((result (make-string required-length :initial-element padding-character)))
-	(loop for ch across normal-string
-	   for ix from 0 do
-	     (setf (aref result ix) ch))
-	result)))
+(define-condition input-string-too-long (simple-error) ((input-string :initarg :input-string)))
+
+(defun right-pad (string pad-length padding-character)
+  "Pads the STRING with PAD-LENGTH copies of the PADDING-CHARACTER. If PAD-LENGTH is negative,
+removes characters from the right end of the string instead."
+  (cond ((> pad-length 0)
+	 (concatenate 'string
+		      string (make-string pad-length :initial-element padding-character)))
+	((= pad-length 0)
+	 string)
+	((< pad-length 0)
+	 (subseq string 0 (+ (length string) pad-length)))))
+
+(defun make-truncated-fixed-length-string  (normal-string required-length external-format)
+  (loop with pad-length = (- required-length (length (flexi-streams:string-to-octets normal-string :external-format external-format)))
+     with min = pad-length
+     with max = 0
+     for encoded-string = (flexi-streams:string-to-octets (right-pad normal-string pad-length nil) :external-format external-format)
+     until (= (length encoded-string) required-length)
+     do (cond ((> (length encoded-string) required-length)
+	       (setf max pad-length))
+	      ((< (length encoded-string) required-length)
+	       (setf min pad-length)))
+       (setf pad-length (+ min (floor (- max min) 2)))
+     finally (return encoded-string)))
+
+(defun make-fixed-length-string (normal-string required-length external-format &optional (padding-character #\Nul))
+  "Creates a FIXED-LENGTH-STRING and encodes it for writing. The REQUIRED-LENGTH is the length in bytes of the string
+after encoding. The EXTERNAL-FORMAT is any value accepted by the FLEXI-STREAMS library as an external-format.
+
+If the NORMAL-STRING is longer than the REQUIRED-LENGTH after encoding without any padding, then a condition of type
+INPUT-STRING-TOO-LONG is raised. The restart CL:TRUNCATE tells this function to truncate the string to the required
+length.
+
+FIXME:
+
+There is still a potential problem here. Suppose that getting to the REQUIRED-LENGTH requires adding an odd number
+of bytes, but the PADDING-CHARACTER is encoded as an even number of bytes. Then this function would loop forever.
+
+Alternately, suppose that the input is too long, and the TRUNCATE restart is chosen. If the input is one byte longer
+than the REQUIRED-LENGTH, but the last character in the string is encoded as two bytes, then MAKE-TRUNCATED-FIXED-LENGTH-STRING
+will never find the right number of characters to trim (the answer is to trim the two-byte character and then pad with a one-byte
+character). I need to find concrete examples of this. These examples are likely to be found in the UTF-8 encoding. "
+  (let ((initial-encoded-string (flexi-streams:string-to-octets normal-string :external-format external-format)))
+    (cond ((= (length initial-encoded-string) required-length)
+	   initial-encoded-string)
+	  ((> (length initial-encoded-string) required-length)
+	   (restart-case
+	       (error 'input-string-too-long :input-string normal-string)
+	     (truncate ()
+	       :report "Truncate the string"
+	       (make-truncated-fixed-length-string normal-string required-length external-format))))
+	  (t
+	   (loop with pad-length = (- required-length (length normal-string))
+	      with max = pad-length
+	      with min = 0
+	      for encoded-string = (flexi-streams:string-to-octets (right-pad normal-string pad-length padding-character) :external-format external-format)
+	      until (= (length encoded-string) required-length)
+	      do (cond ((> (length encoded-string) required-length)
+			(setf max pad-length))
+		       ((< (length encoded-string) required-length)
+			(setf min pad-length)))
+		(setf pad-length (+ min (floor (- max min) 2)))
+	      finally (return encoded-string))))))
+	      
 
 (defmethod read-binary ((type (eql 'terminated-string)) stream)
   (read-terminated-string stream))
@@ -1162,7 +1220,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 				,writer))
 		(return-from this-function
 		  (values defstruct-type reader writer)))))
-	   ((type length &key (external-format :latin1))
+	   ((type length &key (external-format :latin1) (padding-character #\Nul))
 	    :where (member type '(fixed-length-string fixed-string))
 	    (setf reader*
 		  (let ((bytes (gensym))
@@ -1180,7 +1238,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 			,bytes))))
 	    (setf writer*
 		  `(write-bytes
-		    (string-to-octets (pad-fixed-length-string ,name ,length) :external-format ,external-format)
+		    (make-fixed-length-string ,name ,length ,external-format padding-character)
 		    ,stream-symbol))
 	    '(:type string))
 	   ((type count-size &key (external-format :latin1))
@@ -2000,10 +2058,15 @@ TYPES
             according to the field's BYTE-ORDER. As such, it is capable of being more than one byte long,
             so it can be used to specify multi-character terminators such as CRLF.
 
-        (FIXED-LENGTH-STRING length &key (external-format :latin1))
+        (FIXED-LENGTH-STRING length &key (external-format :latin1) (padding-character #\Nul))
 
             Specifies a string of fixed length. When writing, any excess space
-            in the string will be padded with zeroes.
+            in the string will be padded with the PADDING-CHARACTER. The LENGTH is the
+            number of bytes desired after encoding.
+
+            If the input string is longer than the provided LENGTH, a condition of type
+            LISP-BINARY:INPUT-STRING-TOO-LONG will be raised. Invoke the restart CL:TRUNCATE
+            to trim enough excess characters from the string to make it equal to the LENGTH.
 
         (MAGIC &key actual-type value)
 
