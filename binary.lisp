@@ -1238,7 +1238,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 			,bytes))))
 	    (setf writer*
 		  `(write-bytes
-		    (make-fixed-length-string ,name ,length ,external-format padding-character)
+		    (make-fixed-length-string ,name ,length ,external-format ,padding-character)
 		    ,stream-symbol))
 	    '(:type string))
 	   ((type count-size &key (external-format :latin1))
