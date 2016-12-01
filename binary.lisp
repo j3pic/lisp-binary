@@ -1163,7 +1163,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		(return-from this-function
 		  (values defstruct-type reader writer)))))
 	   ((type length &key (external-format :latin1))
-	    :where (eq type 'fixed-length-string)
+	    :where (member type '(fixed-length-string fixed-string))
 	    (setf reader*
 		  (let ((bytes (gensym))
 			(bytes* (gensym))

@@ -512,7 +512,7 @@ value is an integer."
   (let ((size (format-size format)))
     (values
      (decode-float-bits (read-integer size stream :byte-order byte-order)
-			:result-type result-type)
+			:result-type result-type :format format)
      size)))
 
 (defmacro read-float (format &key (stream *standard-input*) (result-type ''float) (byte-order :little-endian))
@@ -520,8 +520,8 @@ value is an integer."
       (let ((size (format-size format)))
 	`(values (decode-float-bits (read-integer ,size ,stream :byte-order ,byte-order)
 				    :format ,format :result-type ,result-type)
-		 ,size)
-      `(%read-float ,format ,stream ,result-type ,byte-order))))		      
+		 ,size))
+      `(%read-float ,format ,stream ,result-type ,byte-order)))
 
 (defun %write-float (format fraction stream byte-order)
   (let ((size (format-size format)))
