@@ -149,19 +149,6 @@ to a list of variables, and will expand to a nested MULTIPLE-VALUE-BIND expressi
 			  ,result)))
     result))
 
-(defun remove-binding (var form)
-  "Removes any binding for VAR from all LET, LET*, LET-VALUES, or LET-VALUES* forms found
-in the FORM."
-  (recursive-mapcar
-   (lambda (node)
-     (destructuring-case node
-       ((let bindings &rest body)
-	:where (member let '(let let* let-values let-values*))
-	`(,let ,(remove var bindings :key #'car)
-	   ,@body))
-       (otherwise node)))
-   form t))
-
 (defun recursive-map (function tree)
   (mapcar (lambda (node)
 	    (if (listp node)
@@ -343,6 +330,19 @@ the result of the FUNCTION even if it is not EQ to the original value.
 		     traverse-results
 		     (cons (recursive-mapcar function (car tree)
 					     traverse-results) result))))))
+
+(defun remove-binding (var form)
+  "Removes any binding for VAR from all LET, LET*, LET-VALUES, or LET-VALUES* forms found
+in the FORM."
+  (recursive-mapcar
+   (lambda (node)
+     (destructuring-case node
+       ((let bindings &rest body)
+	:where (member let '(let let* let-values let-values*))
+	`(,let ,(remove var bindings :key #'car)
+	   ,@body))
+       (otherwise node)))
+   form t))
 
 (defmacro with-letf-bindings ((temp-var place-var value-var temp-binding place-binding) &body body)
   `(destructuring-bind (,temp-var ,place-var) ,temp-binding
