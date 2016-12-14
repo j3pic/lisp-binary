@@ -1,6 +1,6 @@
 (defpackage :lisp-binary/integer
   (:use :common-lisp :lisp-binary-utils)
-  (:export :get-lsb-byte :encode-lsb :decode-lsb :encode-msb
+  (:export :get-lsb-byte :encode-lsb :decode-lsb :encode-msb :decode-msb
 	   :signed->unsigned :unsigned->signed :unsigned->signed/bits
 	   :signed->unsigned/bits 
 	   :read-integer :write-integer :read-bytes :write-bytes :pop-bits
