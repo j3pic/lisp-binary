@@ -101,24 +101,6 @@ by TYPE-SIZE")
 ;;       WRITE-INTEGER and WITH-WRAPPED-IN-BIT-STREAM, which supports
 ;;       its own :BYTE-ORDER argument, which gets stored in the bitstream.
 
-(defun write-integer (number size stream &key (byte-order :little-endian) signed)
-  (when signed
-    (setf number (signed->unsigned number size)))
-  (cond ((integerp size)
-	 (write-bytes (ecase byte-order
-			((:big-endian) (encode-msb number size))
-			((:little-endian) (encode-lsb number size))
-			(otherwise (error "Invalid byte order: ~a" byte-order)))
-		      stream))
-	(t (let* ((whole-bytes (floor size))
-		  (too-big (funcall ;; TOO-BIG encodes the integer to be written with one more
-			    ;; byte for the fractional part.
-			    (ecase byte-order
-			      (:big-endian #'encode-msb)
-			      (:little-endian #'encode-lsb))
-			    number (1+ whole-bytes))))
-	     (write-bytes too-big stream size)))))
-
 
 (defmacro with-open-binary-file ((stream filespec &rest options
 					 &key (direction :input) if-exists if-does-not-exist)

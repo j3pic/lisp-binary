@@ -105,7 +105,25 @@ to that function should match the one given to this function."))
 (defmethod read-bytes (n stream &key (element-type '(unsigned-byte 8)))
   (let ((result (make-array n :element-type element-type)))
     (values result (read-sequence result stream))))
-	       
+
+(defun write-integer (number size stream &key (byte-order :little-endian) signed)
+  (when signed
+    (setf number (signed->unsigned number size)))
+  (cond ((integerp size)
+	 (write-bytes (ecase byte-order
+			((:big-endian) (encode-msb number size))
+			((:little-endian) (encode-lsb number size))
+			(otherwise (error "Invalid byte order: ~a" byte-order)))
+		      stream))
+	(t (let* ((whole-bytes (floor size))
+		  (too-big (funcall ;; TOO-BIG encodes the integer to be written with one more
+			    ;; byte for the fractional part.
+			    (ecase byte-order
+			      (:big-endian #'encode-msb)
+			      (:little-endian #'encode-lsb))
+			    number (1+ whole-bytes))))
+	     (write-bytes too-big stream size)))))
+
 (defun read-integer (length stream &key (byte-order :little-endian) signed)
   "Reads an integer of LENGTH bytes from the STREAM in the specified BYTE-ORDER.
 
