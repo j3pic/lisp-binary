@@ -9,7 +9,7 @@
 
 (in-package :lisp-binary/integer)
 
-(declaim (optimize (debug 0) (speed 3)))
+;; (declaim (optimize (debug 0) (speed 3)))
 
 
 (defun get-lsb-byte (number byte)

@@ -38,7 +38,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	 
 (in-package :lisp-binary)
 
-(declaim (optimize (debug 0) (speed 3)))
+;; (declaim (optimize (debug 0) (speed 3)))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (enable-quasiquote-2.0)
@@ -175,6 +175,7 @@ Example:
 			(gethash enum *enum-definitions*))))
     (car (assoc-cdr value (slot-value definition 'variables)))))
 
+(defparameter *byte-order* :little-endian)
 
 (defun write-enum (enum symbol stream)
   (let ((enum-def (if (enum-definition-p enum)
@@ -346,6 +347,9 @@ character). I need to find concrete examples of this. These examples are likely 
 	      finally (return encoded-string))))))
 	      
 
+(defgeneric read-binary (type stream))
+(defgeneric write-binary (obj stream))
+
 (defmethod read-binary ((type (eql 'terminated-string)) stream)
   (read-terminated-string stream))
 
@@ -364,6 +368,24 @@ character). I need to find concrete examples of this. These examples are likely 
 
 (declaim (notinline type-size make-bit-field combine-field-descriptions
 		    externally-byte-aligned-p))
+
+(defvar *ignore-eval-type-bitstream-issue* t
+  "If a DEFBINARY struct contains a field of type (EVAL ...),
+then the macro cannot statically determine whether the struct can
+be read without using a BIT-STREAM. If this is set to NIL, then
+a condition is raised every time an (EVAL ...) type is encountered,
+with restarts available to tell the macro whether a bitstream is
+required for that particular field. 
+
+Typically, the error would reach EMACS, and the programmer can then
+pick a restart from the menu.
+
+However, this doesn't work if you're using COMPILE-FILE, because COMPILE-FILE
+catches exceptions, so you don't see the error until it has already been
+caught, so you will not be presented with the restarts that I have set up.
+
+For most programs, just ignoring the issue is good enough. Setting this to T (the default)
+causes the expander to ignore this problem and not raise a condition.")
 
 (defun type-size (type-spec)
   "Determines the size in bits of a DEFBINARY type, for the purposes
@@ -538,9 +560,6 @@ Returns three values:
 
 (define-condition unspecified-type-error (simple-condition) ())
 
-(defgeneric read-binary (type stream))
-(defgeneric write-binary (obj stream))
-
 (defun expand-previous-defs (symbol value form)
   (subst* `((,symbol ,value)) form))
 
@@ -552,23 +571,6 @@ Returns three values:
 	to-next-boundary)))
 
 (defvar *debug* nil)
-(defvar *ignore-eval-type-bitstream-issue* t
-  "If a DEFBINARY struct contains a field of type (EVAL ...),
-then the macro cannot statically determine whether the struct can
-be read without using a BIT-STREAM. If this is set to NIL, then
-a condition is raised every time an (EVAL ...) type is encountered,
-with restarts available to tell the macro whether a bitstream is
-required for that particular field. 
-
-Typically, the error would reach EMACS, and the programmer can then
-pick a restart from the menu.
-
-However, this doesn't work if you're using COMPILE-FILE, because COMPILE-FILE
-catches exceptions, so you don't see the error until it has already been
-caught, so you will not be presented with the restarts that I have set up.
-
-For most programs, just ignoring the issue is good enough. Setting this to T (the default)
-causes the expander to ignore this problem and not raise a condition.")
 
 (defun runtime-reader/writer-form (reader-or-writer byte-count-name byte-count stream-symbol stream let-defs)
   "Wraps READER-OR-WRITER in the lexical context required for it to work. READER-OR-WRITER is a reader or writer
@@ -1517,6 +1519,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 			 'symbol
 			 type)))
 	   ((type &rest something)
+	    (declare (ignore type something))
 	    (error "Unable to generate a reader or writer for unknown type ~S" (slot-value type-info 'type))))
 	 (if reader
 	     `(funcall ,reader ,stream-symbol)
@@ -1749,7 +1752,7 @@ If they can't be read as bitfields, then a :BIT-STREAM-ID option is added to the
 			 else do (error "Internal error: Unknown command ~S" command)))))))
 	 (t (values field-descriptions :bit-stream-required))))
 
-(defmacro make-reader-let-def (f)
+(defmacro old-make-reader-let-def (f)
   "Creates a single variable definition to go in the let-def form within READ-BINARY. F is a
 BINARY-FIELD object that describes the field. Captures several local variables within DEFBINARY.
 It's a macro because it became necessary to use it twice."
@@ -1897,8 +1900,6 @@ STREAM-NAMES."
      for stream-name = (stream-used-here write-form-group)
        collect (cons stream-name write-form-group))))
 
-
-(defparameter *byte-order* :little-endian)
 
 (defmacro defbinary (name (&rest defstruct-options
 				 &key (byte-order :little-endian)
