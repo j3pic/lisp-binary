@@ -8,10 +8,10 @@
 (defclass bit-stream (fundamental-binary-stream)
   ((element-bits :type fixnum :initform 8 :initarg :element-bits)
    (real-stream :type stream :initarg :real-stream)
-   #+unix (unix-fd :type fixnum :initarg :unix-fd)
+   #+unix (unix-fd :type (or fixnum null) :initarg :unix-fd)
    #+windows (file-handle :type integer :initarg :file-handle)
-   (last-byte :type unsigned-byte :initform 0)
-   (last-op :type unsigned-byte :initform nil)
+   (last-byte :type (or unsigned-byte null) :initform 0)
+   (last-op :type symbol :initform nil)
    (bits-left :type integer :initform 0)
    (byte-order :type keyword :initarg :byte-order :initform :little-endian)))
        		
@@ -79,7 +79,8 @@ copy it into the Lisp array afterwards, which is suboptimal."
 
 (defun real-read-byte (stream)
   (let ((real-stream (slot-value stream 'real-stream))
-	(fd (slot-value stream #+unix 'unix-fd #+windows 'file-handle)))
+	(fd (slot-value stream #+unix 'unix-fd 
+                        #+windows 'file-handle)))
     (cond (real-stream
 	   (read-byte real-stream))
 	  (fd
@@ -95,7 +96,7 @@ copy it into the Lisp array afterwards, which is suboptimal."
 						:string))
 		   (mem-ref buffer :uchar)))
 	     #+windows
-	     (error "ReadFile support not implemented"))))))		      
+	     (error "ReadFile support not implemented"))))))
 
 (defun real-write-byte (integer stream)
   (write-byte integer stream))
@@ -267,7 +268,8 @@ copy it into the Lisp array afterwards, which is suboptimal."
 	      count t))))
 
 #-sbcl
-(defmethod stream-read-sequence ((stream bit-stream) sequence start end &key &allow-other-keys)
+(defmethod #+ccl ccl:stream-read-vector #-ccl stream-read-sequence  ((stream bit-stream) sequence start end
+                                                                     #-ccl &key #-ccl &allow-other-keys)
   (%stream-read-sequence stream sequence start end))
 
 #+sbcl
