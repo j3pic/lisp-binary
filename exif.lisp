@@ -80,54 +80,90 @@
   (file-position 0 :type file-position)
   (tag 0 :type (unsigned-byte 16))
   (type 0 :type tiff-type)
-  (count 0 :type (unsigned-byte 32) :writer (lambda (obj stream)
-					      (declare (ignore obj))
-					      (setf count (if (eq type :ascii)
-							      (1+ (length value))
-							      (if (or (listp value)
-								      (vectorp value))
-								  (length value)
-								  1)))
-					      (write-integer count 4 stream :byte-order *byte-order*)))
+  (count 0 :type (unsigned-byte 32)
+	 ;; This custom writer ensures that the COUNT remains
+	 ;; synced with the length of the VALUE below.
+	 :writer (lambda (obj stream)
+		   (declare (ignore obj))
+		   (setf count (if (eq type :ascii)
+				   (1+ (length value))
+				   (if (or (listp value)
+					   (vectorp value))
+				       (length value)
+				       1)))
+		   (write-integer count 4 stream :byte-order *byte-order*)))
+  ;; The VALUE depends on both the TYPE and the COUNT. The total number of
+  ;; bytes needed to store the VALUE is given by (size of the type) * (count).
+  ;; If this size is > 4 bytes, then the type of the VALUE must resolve to:
+  ;;
+  ;;   (pointer :pointer-type (unsigned-byte 32)
+  ;;            :data-type the-actual-type-of-the-value
+  ;;            :base-pointer 'tiff-base-pointer
+  ;;            :region-tag 'tiff-region)
+  ;;
+  ;; The BASE-POINTER is declared at the beginning of the TIFF type definition,
+  ;; and tells the LISP-BINARY library that the pointer is an offset that
+  ;; begins at the BASE-POINTER.
+  ;;
+  ;; The REGION-TAG is used in writing the pointer. The region tag named
+  ;; TIFF-REGION is also declared in the TIFF type definition, and determines
+  ;; where the data being pointed to will end up going. The value is merely
+  ;; STORED when the pointer is written, and it gets written to disk when the
+  ;; REGION-TAG is reached.
   (value 0 :type (eval
-		  ;; TIFF requires that ANY value that can fit within 4 bytes
-		  ;; be represented as an immediate value. That includes array
-		  ;; types.
-		  (cond ((and (eq type :ascii)
-			      (<= count 4))
-			 (tiff-type->defbinary-type :ascii))
-			((or (and (member type '(:signed-byte :unsigned-byte))
-				  (<= count 4)
-				  (> count 1))
-			     (and (member type '(:signed-short :unsigned-short))
-				  (= count 2)))
-			 `(simple-array ,(tiff-type->defbinary-type type)
-					(,count)))
-			((> count 1)
-			 `(pointer :pointer-type (unsigned-byte 32)
-				   :data-type ,(tiff-type->defbinary-type type)
-				   :base-pointer-name 'tiff-base-pointer
-				   :validator #'ensure-non-null-pointer
-				   :region-tag 'tiff-region))
-			((member tag '(34665 ;; EXIF
-				       34853 ;; GPS
-				       40965)) ;; Interoperability
-			 `(pointer :pointer-type (unsigned-byte 32)
-				   :data-type tiff-image-file-directory
-				   :base-pointer-name 'tiff-base-pointer
-				   :validator #'ensure-non-null-pointer
-				   :region-tag 'tiff-region))
-			(t
-			 (case type
-			   ((:undefined)
-			    '(unsigned-byte 32))
-			   ((:double-float :signed-rational :unsigned-rational :ascii)
-			    `(pointer :pointer-type (unsigned-byte 32)
-				      :data-type ,(tiff-type->defbinary-type type)
-				      :base-pointer-name 'tiff-base-pointer
-				      :validator #'ensure-non-null-pointer
-				      :region-tag 'tiff-region))
-			   (otherwise (tiff-type->defbinary-type type)))))))
+		  (cond
+		    ;; This tells LISP-BINARY that strings with a count <= 4
+		    ;; (which includes the terminating NUL) will fit inside
+		    ;; the VALUE, so we don't need a pointer.
+		    ((and (eq type :ascii)
+			  (<= count 4))
+		     (tiff-type->defbinary-type :ascii))
+		    ;; This tells LISP-BINARY that byte arrays with
+		    ;; count <= 4 and short arrays with count <= 2
+		    ;; will fit within the VALUE.
+		    ((or (and (member type '(:signed-byte :unsigned-byte))
+			      (<= count 4)
+			      (> count 1))
+			 (and (member type '(:signed-short :unsigned-short))
+			      (= count 2)))
+		     `(simple-array ,(tiff-type->defbinary-type type)
+				    (,count)))
+		    ;; This makes any other array type into a pointer.
+		    ((> count 1)
+		     `(pointer :pointer-type (unsigned-byte 32)
+			       :data-type ,(if (eq type :ascii)
+					       (tiff-type->defbinary-type :ascii)
+					       `(simple-array ,(tiff-type->defbinary-type type) (,count)))
+			       :base-pointer-name 'tiff-base-pointer
+			       :validator #'ensure-non-null-pointer
+			       :region-tag 'tiff-region))
+		    ;; Certain tags mark their value as being an
+		    ;; unsigned long, but they should really be treated
+		    ;; as pointers to Image File Directories.
+		    ((member tag '(34665       ;; EXIF
+				   34853       ;; GPS
+				   40965))     ;; Interoperability
+		     `(pointer :pointer-type (unsigned-byte 32)
+			       :data-type tiff-image-file-directory
+			       :base-pointer-name 'tiff-base-pointer
+			       :validator #'ensure-non-null-pointer
+			       :region-tag 'tiff-region))
+		    (t
+		     (case type
+		       ((:undefined)
+			'(unsigned-byte 32))
+		       ;; Some types are just plain too big to fit in the VALUE.
+		       ;; Generate pointers to them.
+		       ((:double-float :signed-rational :unsigned-rational :ascii)
+			`(pointer :pointer-type (unsigned-byte 32)
+				  :data-type ,(tiff-type->defbinary-type type)
+				  :base-pointer-name 'tiff-base-pointer
+				  :validator #'ensure-non-null-pointer
+				  :region-tag 'tiff-region))
+		       ;; Some types will fit just fine.
+		       (otherwise (tiff-type->defbinary-type type)))))))
+  ;; If the VALUE doesn't use 32 bits, then it must be padded. The PADDING
+  ;; is an unsigned integer that fills in the space not used by the VALUE.
   (padding 0 :type (eval (if (> count 1)
 			     'null
 			     (ecase type
@@ -156,7 +192,7 @@
   (tiff-base-pointer 0 :type base-pointer)
   (byte-order 0 :type tiff-byte-order :reader (lambda (stream)
 						      (values
-						       (setf *byte-order* (read-enum 'tiff-byte-order stream))
+						       (setf *byte-order* (read-binary-type 'tiff-byte-order stream))
 						       2)))
   (magic 42 :type (magic :actual-type (unsigned-byte 16)
 			 :value 42))

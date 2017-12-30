@@ -194,7 +194,7 @@ for each extra component-per-pixel, and each element will have one of the follow
 			 (if (> count 1)
 			     '(unsigned-byte 32)
 			     (ecase type
-			       ((:unsigned-long :unsigned-rational :signed-rational :double-float :ascii)
+			       ((:unsigned-long :unsigned-rational :signed-rational :double-float :ascii :undefined)
 				'(unsigned-byte 32))
 			       (:signed-long '(signed-byte 32))
 			       (:single-float 'single-float)
@@ -206,7 +206,7 @@ for each extra component-per-pixel, and each element will have one of the follow
 			     'null
 			     (ecase type
 			       ((:unsigned-long :unsigned-rational :signed-rational :double-float :ascii :signed-long
-						:single-float)
+						:single-float :undefined)
 				'null)
 			       ((:signed-byte :unsigned-byte)
 				'(unsigned-byte 24))
