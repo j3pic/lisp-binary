@@ -259,8 +259,7 @@ specified BYTE-ORDER, then writes out the BUFFER."
   "Reads a string ending in the byte sequence specified by TERMINATOR. The TERMINATOR is
 not included in the resulting buffer. The default is to read C-style strings, terminated
 by a zero."
-  (declare (type stream stream)
-	   (type (simple-array (unsigned-byte 8) (*)) terminator))
+  (declare (type (simple-array (unsigned-byte 8) (*)) terminator))
   (restart-case
       (let ((term-ix 0)
 	    (bytes-read 0)
