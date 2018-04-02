@@ -1904,7 +1904,7 @@ STREAM-NAMES."
 				 &key (byte-order :little-endian)
 				 (preserve-*byte-order* t)
 				 align
-				     export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
+                                 export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
   "Defines a struct that represents binary data, and also generates readers and writers.
 
 Example:
@@ -2377,7 +2377,7 @@ FLOATING-POINT NUMBERS
 
 "
   (setf defstruct-options
-	(remove-plist-keys defstruct-options :export :byte-order :align :preserve-*byte-order*))
+	(remove-plist-keys defstruct-options :export :byte-order :byte-count-name :align :preserve-*byte-order*))
   (let* ((stream-symbol (gensym "STREAM-SYMBOL-"))
 	 (*ignore-on-write* nil)
 	 (bit-stream-groups (make-hash-table))
