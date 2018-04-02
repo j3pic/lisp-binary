@@ -138,7 +138,7 @@ keywords and integer values that are expected to be found in a binary file. The 
 
 Example:
 
-    (define-enum speeds 2
+    (define-enum speeds 2 ()
        slow                 ;; Implicitly 0
        light-speed          ;; Implicitly 1
        (ridiculous-speed 5) ;; Explicit value
@@ -2507,8 +2507,7 @@ FLOATING-POINT NUMBERS
 									  write-form))
 							else collect write-form)
 						   collect `(incf ,byte-count-name ,processed-write-form)))
-			  collect `(,@(if (or (null stream-name)
-					      (eq stream-name stream-symbol))
+			  collect `(,@(if (eq stream-name stream-symbol)
 					  '(progn)
 					  `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
 										     :byte-order ,byte-order)))
