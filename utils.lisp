@@ -5,12 +5,19 @@
 	   :recursive-map :assoc-cdr :aif :awhen :it :destructuring-case :recursive-find/collect :plist-replace
 	   :recursive-find-if :recursive-mapcar :letf :relative-file-position :group :let-values* :let-values :divisiblep
 	   :named-let :pushover :insert-before :has-sublist-p :find-sublist :recursive-find-sublist :remove-binding :mapseq
-	   :with-file-position))
+	   :with-file-position :simple-define-condition))
 
 (in-package :lisp-binary-utils)
 
 (defun divisiblep (num denom)
   (= (mod num denom) 0))
+
+(defmacro simple-define-condition (name parent-classes slots)
+  `(define-condition ,name ,parent-classes
+                     ,(loop for slot-name in slots
+                        collect (if (listp slot-name)
+                                    slot-name
+                                    `(,slot-name :initarg ,(intern (symbol-name slot-name) :keyword))))))
 
 (defmacro named-let (name defs &body body)
   (let ((vars (mapcar #'first defs))

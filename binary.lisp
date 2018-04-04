@@ -159,8 +159,8 @@ Example:
        (setf (gethash ',name *enum-definitions*) definition)
        (deftype ,name () 'symbol))))
 
-(define-condition bad-enum-value (simple-error) (integer-value symbol-value enum-name))
-(define-condition bad-magic-value (simple-error) (bad-value required-value))
+(simple-define-condition bad-enum-value (simple-error) (integer-value symbol-value enum-name))
+(simple-define-condition bad-magic-value (simple-error) (bad-value required-value))
 
 (defun get-enum-value (enum symbol)
   (let ((definition (if (enum-definition-p enum)
