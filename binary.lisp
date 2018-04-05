@@ -138,7 +138,7 @@ keywords and integer values that are expected to be found in a binary file. The 
 
 Example:
 
-    (define-enum speeds 2
+    (define-enum speeds 2 ()
        slow                 ;; Implicitly 0
        light-speed          ;; Implicitly 1
        (ridiculous-speed 5) ;; Explicit value
@@ -159,8 +159,8 @@ Example:
        (setf (gethash ',name *enum-definitions*) definition)
        (deftype ,name () 'symbol))))
 
-(define-condition bad-enum-value (simple-error) (integer-value symbol-value enum-name))
-(define-condition bad-magic-value (simple-error) (bad-value required-value))
+(simple-define-condition bad-enum-value (simple-error) (integer-value symbol-value enum-name))
+(simple-define-condition bad-magic-value (simple-error) (bad-value required-value))
 
 (defun get-enum-value (enum symbol)
   (let ((definition (if (enum-definition-p enum)
@@ -222,8 +222,8 @@ Example:
 	      :initial-contents elements))
 
 (defmacro read-octets-to-string (read-form &rest options)
-  (let ((read-result (gensym))
-	(bytes-read (gensym)))
+  (let ((read-result (gensym "READ-RESULT"))
+	(bytes-read (gensym "BYTES-READ")))
     `(multiple-value-bind (,read-result ,bytes-read) ,read-form
        (values (octets-to-string ,read-result ,@options)
 	       ,bytes-read))))
@@ -1010,8 +1010,8 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		  ((kwtype (type bits)) :where (and (eq type 'unsigned-byte)
 						    (integerp bits)
 						    (eq kwtype :type))
-		   (let ((temp-var (gensym))
-			 (bytes-read (gensym))
+		   (let ((temp-var (gensym "TEMP-VAR-"))
+			 (bytes-read (gensym "BYTES-READ-"))
 			 (signedness nil)
 			 (field-sizes nil))
 		     (loop for (member-type bits) in member-types
@@ -1182,9 +1182,9 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		    actual-type))	      
 	      (multiple-value-bind (defstruct-type reader writer)
 		  (expand-defbinary-type-field struct-name type-info)
-		(setf reader (let ((v (gensym))
-				   (bytes-read (gensym))
-				   (required-value (gensym)))
+		(setf reader (let ((v (gensym "READER-"))
+				   (bytes-read (gensym "BYTES-READ-"))
+				   (required-value (gensym "REQUIRED-VALUE-")))
 			       `(let ((,required-value ,value))
 				  (multiple-value-bind (,v ,bytes-read) ,reader
 				    (unless (equal ,v ,required-value)
@@ -1206,9 +1206,9 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	   ((type length &key (external-format :latin1) (padding-character #\Nul))
 	    :where (member type '(fixed-length-string fixed-string))
 	    (setf reader*
-		  (let ((bytes (gensym))
-			(bytes* (gensym))
-			(buffer (gensym)))
+		  (let ((bytes (gensym "BYTES-"))
+			(bytes* (gensym "BYTES*-"))
+			(buffer (gensym "BUFFER-")))
 		    
 		    `(let ((,bytes nil))
 		       (values
@@ -1281,12 +1281,12 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		(error "Invalid simple-array type (SIMPLE-ARRAY ~a ~a): DEFBINARY only supports 1-dimensional arrays."
 		       type lengths))
 	      (let ((length (car lengths))
-		    (name-one (gensym))
-		    (buffer (gensym))
-		    (next-value (gensym))
-		    (bytes (gensym))
-		    (local-byte-count (gensym))
-		    (ix (gensym)))
+		    (name-one (gensym "NAME-ONE-"))
+		    (buffer (gensym "BUFFER-"))
+		    (next-value (gensym "NEXT-VALUE-"))
+		    (bytes (gensym "BYTES-"))
+		    (local-byte-count (gensym "LOCAL-BYTE-COUNT-"))
+		    (ix (gensym "IX-")))
 		(flet ((maybe-add-align (form readp)
 			 (let ((move-op (if readp
 					    '#'read-bytes
@@ -1904,7 +1904,7 @@ STREAM-NAMES."
 				 &key (byte-order :little-endian)
 				 (preserve-*byte-order* t)
 				 align
-				     export (byte-count-name (gensym)) &allow-other-keys) &rest field-descriptions)
+                                 export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
   "Defines a struct that represents binary data, and also generates readers and writers.
 
 Example:
@@ -2377,14 +2377,14 @@ FLOATING-POINT NUMBERS
 
 "
   (setf defstruct-options
-	(remove-plist-keys defstruct-options :export :byte-order :align :preserve-*byte-order*))
-  (let* ((stream-symbol (gensym))
+	(remove-plist-keys defstruct-options :export :byte-order :byte-count-name :align :preserve-*byte-order*))
+  (let* ((stream-symbol (gensym "STREAM-SYMBOL-"))
 	 (*ignore-on-write* nil)
 	 (bit-stream-groups (make-hash-table))
 	 (bit-stream-required nil)
-	 (previous-defs-symbol (gensym))
-	 (most-recent-byte-count (gensym))
-	 (form-value (gensym))
+	 (previous-defs-symbol (gensym "PREVIOUS-DEFS-SYMBOL-"))
+	 (most-recent-byte-count (gensym "MOST-RECENT-BYTE-COUNT-"))
+	 (form-value (gensym "FORM-VALUE-"))
 	 (parse-field-descriptions-fn
 	  (lambda (field-descriptions)
 	    (loop for f in field-descriptions
@@ -2507,8 +2507,7 @@ FLOATING-POINT NUMBERS
 									  write-form))
 							else collect write-form)
 						   collect `(incf ,byte-count-name ,processed-write-form)))
-			  collect `(,@(if (or (null stream-name)
-					      (eq stream-name stream-symbol))
+			  collect `(,@(if (eq stream-name stream-symbol)
 					  '(progn)
 					  `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
 										     :byte-order ,byte-order)))
