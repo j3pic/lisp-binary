@@ -1,3 +1,17 @@
+(let ((asdf-version (when (find-package :asdf)
+                      (let ((ver (symbol-value
+                                  (or (find-symbol (string :*asdf-version*) :asdf)
+                                      (find-symbol (string :*asdf-revision*) :asdf)))))
+                        (etypecase ver
+                          (string ver)
+                          (cons (with-output-to-string (s)
+                                  (loop for (n . m) on ver
+                                    do (princ n s)
+                                    (when m (princ "." s)))))
+                          (null "1.0"))))))
+  (unless (string>= version "3.1.5")
+    (error "LISP-BINARY requires ASDF 3.1.5 or better. You have ~a" version)))
+
 (asdf:defsystem :lisp-binary
   :author ("Jeremy Phelps")
   :version "1"
