@@ -191,8 +191,8 @@ Better performance could be acheived if INTEGER could be a FIXNUM, but it can't.
   (setf field-signedness (reverse field-signedness))
   (apply #'values
 	 (reverse (loop for bits of-type (unsigned-byte 29) in (reverse field-bits) 
-		     for mask = (- (the fixnum (ash 1 bits)) 
-				   (the fixnum 1))
+		     for mask = (- (ash 1 bits)
+				   1)
 		       for signed = (pop field-signedness)
 		     collect (let ((unsigned-result (logand mask integer)))
 			       (if signed
