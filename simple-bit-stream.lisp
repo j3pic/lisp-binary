@@ -190,7 +190,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
   (unless (>= end start)
     (return-from %stream-write-sequence sequence))
   (cond ((and (equal (slot-value stream 'bits-left) 0)
-	      (slot-value stream 'real-stream))
+	      (streamp (slot-value stream 'real-stream)))
 	 (write-sequence sequence (slot-value stream 'real-stream) :start start :end end))
 	(t (loop for ix from start to end
 	      do (write-byte (elt sequence ix) stream))
@@ -210,11 +210,11 @@ can be discarded if BYTE-ALIGNED-P returns T."))
     (return-from %stream-read-sequence sequence))
   (init-read stream)
   (cond ((and (equal (slot-value stream 'bits-left) 0)
-	      (slot-value stream 'real-stream))
+	      (streamp (slot-value stream 'real-stream)))
 	 (read-sequence sequence (slot-value stream 'real-stream) :start start :end end))
 	(t
 	 (loop for ix from start below end
-	    do (setf (aref sequence ix) (read-byte stream))
+	    do (setf (elt sequence ix) (read-byte stream))
 	      count t))))
 
 #-sbcl
