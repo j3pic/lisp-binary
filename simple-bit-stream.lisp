@@ -299,9 +299,7 @@ The byte order is determined from the STREAM object, which must be a SIMPLE-BIT-
 (defun read-bits (bits stream)
   "Reads BITS bits from STREAM. If the STREAM is big-endian, the most
 significant BITS bits will be read, otherwise, the least significant BITS bits
-will be. The result is an integer of BITS bits.
-
-TODO: Test this."
+will be. The result is an integer of BITS bits."
   (ecase (slot-value stream 'byte-order)
     (:little-endian
      (init-read stream)
