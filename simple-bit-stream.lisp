@@ -1,5 +1,5 @@
 (defpackage :simple-bit-stream
-  (:use :common-lisp :trivial-gray-streams :lisp-binary/integer :cffi)
+  (:use :common-lisp :trivial-gray-streams :lisp-binary/integer)
   (:export :wrap-in-bit-stream :with-wrapped-in-bit-stream :bit-stream :read-bits
 	   :write-bits :read-bytes-with-partial :byte-aligned-p))
 
@@ -8,8 +8,6 @@
 (defclass bit-stream (fundamental-binary-stream)
   ((element-bits :type fixnum :initform 8 :initarg :element-bits)
    (real-stream :type stream :initarg :real-stream)
-   #+unix (unix-fd :type (or fixnum null) :initarg :unix-fd)
-   #+windows (file-handle :type integer :initarg :file-handle)
    (last-byte :type (or unsigned-byte null) :initform 0)
    (last-op :type symbol :initform nil)
    (bits-left :type integer :initform 0)
@@ -24,14 +22,7 @@
 can be discarded if BYTE-ALIGNED-P returns T."))
 
 (defmethod wrap-in-bit-stream ((object stream) &key (byte-order :little-endian))
-  (make-instance 'bit-stream :real-stream object :byte-order byte-order
-		 #+unix :unix-fd
-		 #+windows :file-handle nil))
-
-(defmethod wrap-in-bit-stream ((object integer) &key (byte-order :little-endian))
-  (make-instance 'bit-stream
-		 #+unix :unix-fd #+windows :file-handle object
-		 :byte-order byte-order))
+  (make-instance 'bit-stream :real-stream object :byte-order byte-order))
 
 (defmacro with-wrapped-in-bit-stream ((var non-bitstream &key (byte-order :little-endian)
 					   close-when-done) &body body)
@@ -44,8 +35,6 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	     `((if ,close-when-done
 		   (close ,var)))))))
        
-
-(defcvar errno :int)
 
 (declaim (inline init-read init-write reset-op))
 
@@ -62,50 +51,11 @@ can be discarded if BYTE-ALIGNED-P returns T."))
   (unless (eq (slot-value stream 'last-op) :write)
     (reset-op stream :write)))
 
-(declaim (inline foreign-read-into-array))
-
-(defun foreign-read-into-array (array fd)
-  "FIXME: Doesn't actually work, and even if it did, it would have to allocate a C buffer and then
-copy it into the Lisp array afterwards, which is suboptimal."
-  (declare (ignore array fd))
-  #+unix-disabled (foreign-funcall "read" :int fd (:pointer :uchar) (convert-to-foreign array '(:pointer :uchar))
-			  #+x86 :uint32
-			  #+x86-64 :uint64 (length array)
-			  :int)
-  #+windows (error "Not implemented on Windows")
-  (values))
-
-(declaim (inline real-read-byte real-write-byte))
-
-(defun real-read-byte (stream)
-  (let ((real-stream (slot-value stream 'real-stream))
-	(fd (slot-value stream #+unix 'unix-fd 
-                        #+windows 'file-handle)))
-    (cond (real-stream
-	   (read-byte real-stream))
-	  (fd
-	   (with-foreign-objects ((buffer :uchar 1))
-	     #+unix
-	     (let ((status
-		    (foreign-funcall "read"
-				     :int fd :pointer buffer
-				     #+x86 :uint32
-				     #+x86-64 :uint64 1 :int)))
-	       (if (= status -1)
-		   (error "~a" (foreign-funcall "strerror" :int errno
-						:string))
-		   (mem-ref buffer :uchar)))
-	     #+windows
-	     (error "ReadFile support not implemented"))))))
-
-(defun real-write-byte (integer stream)
-  (write-byte integer stream))
-
 (defun read-partial-byte/big-endian (bits stream)
     (cond
       ((= (slot-value stream 'bits-left) 0)
        (setf (slot-value stream 'last-byte)
-	     (real-read-byte stream))
+	     (read-byte (slot-value stream 'real-stream)))
        (setf (slot-value stream 'bits-left)
 	     (slot-value stream 'element-bits))
        (read-partial-byte/big-endian bits stream))
@@ -128,7 +78,7 @@ copy it into the Lisp array afterwards, which is suboptimal."
     (cond
       ((= (slot-value stream 'bits-left) 0)
        (setf (slot-value stream 'last-byte)
-	     (real-read-byte stream))
+	     (read-byte (slot-value stream 'real-stream)))
        (setf (slot-value stream 'bits-left)
 	     (slot-value stream 'element-bits))
        (read-partial-byte/little-endian bits stream))
@@ -150,11 +100,11 @@ copy it into the Lisp array afterwards, which is suboptimal."
 (defmethod stream-finish-output ((stream bit-stream))
   (unless (or (not (eq (slot-value stream 'last-op) :write))
 	      (= (slot-value stream 'bits-left) 0))
-    (real-write-byte (ecase (slot-value stream 'byte-order)
-		       (:little-endian (slot-value stream 'last-byte))
-		       (:big-endian (ash (slot-value stream 'last-byte)
-					 (- 8 (slot-value stream 'bits-left)))))
-		     (slot-value stream 'real-stream))
+    (write-byte (ecase (slot-value stream 'byte-order)
+		  (:little-endian (slot-value stream 'last-byte))
+		  (:big-endian (ash (slot-value stream 'last-byte)
+				    (- 8 (slot-value stream 'bits-left)))))
+		(slot-value stream 'real-stream))
     (finish-output (slot-value stream 'real-stream))))
 
 (defmethod stream-force-output ((stream bit-stream))
@@ -168,7 +118,7 @@ copy it into the Lisp array afterwards, which is suboptimal."
 (defmethod stream-read-byte ((stream bit-stream))
   (init-read stream)
   (cond ((= (slot-value stream 'bits-left) 0)
-	 (real-read-byte stream))
+	 (read-byte stream (slot-value stream 'real-stream)))
 	((= (slot-value stream 'bits-left)
 	    (slot-value stream 'element-bits))
 	 (prog1
@@ -215,14 +165,14 @@ copy it into the Lisp array afterwards, which is suboptimal."
 (defmethod stream-write-byte ((stream bit-stream) integer)
   (init-write stream)
   (cond ((= (slot-value stream 'bits-left) 0)
-	 (real-write-byte integer (slot-value stream 'real-stream)))
+	 (write-byte integer (slot-value stream 'real-stream)))
 	(t (let ((total-bits-left (+ (slot-value stream 'element-bits)
 				     (slot-value stream 'bits-left))))
 	     (multiple-value-bind (byte-to-write new-last-byte)
 		 (ecase (slot-value stream 'byte-order)
 		   (:little-endian
 		    (push-bits integer (slot-value stream 'bits-left)
-				  (slot-value stream 'last-byte))
+			       (slot-value stream 'last-byte))
 		    (values (pop-bits/le (slot-value stream 'element-bits)
 					 (slot-value stream 'last-byte))
 			    (slot-value stream 'last-byte)))
@@ -234,7 +184,7 @@ copy it into the Lisp array afterwards, which is suboptimal."
 				      (slot-value stream 'last-byte))
 			    (slot-value stream 'last-byte))))
 	       (setf (slot-value stream 'last-byte) new-last-byte)
-	       (real-write-byte byte-to-write (slot-value stream 'real-stream)))))))
+	       (write-byte byte-to-write (slot-value stream 'real-stream)))))))
 
 (defun %stream-write-sequence (stream sequence start end)
   (unless (>= end start)
@@ -371,10 +321,10 @@ TODO: Test this."
      (incf (slot-value stream 'bits-left) n-bits)
      (loop while (>= (slot-value stream 'bits-left)
 		     (slot-value stream 'element-bits))
-	  do
-	  (real-write-byte (pop-bits/le (slot-value stream 'element-bits)
-					(slot-value stream 'last-byte))
-			   (slot-value stream 'real-stream))
+	do
+	  (write-byte (pop-bits/le (slot-value stream 'element-bits)
+				   (slot-value stream 'last-byte))
+		      (slot-value stream 'real-stream))
 	  (decf (slot-value stream 'bits-left)
 		(slot-value stream 'element-bits))))
     (:big-endian
@@ -385,10 +335,10 @@ TODO: Test this."
      (loop while (>= (slot-value stream 'bits-left)
 		     (slot-value stream 'element-bits))
 	do
-	  (real-write-byte (pop-bits (slot-value stream 'element-bits)
-				     (slot-value stream 'bits-left)
-				     (slot-value stream 'last-byte))
-			   (slot-value stream 'real-stream))
+	  (write-byte (pop-bits (slot-value stream 'element-bits)
+				(slot-value stream 'bits-left)
+				(slot-value stream 'last-byte))
+		      (slot-value stream 'real-stream))
 	  (decf (slot-value stream 'bits-left)
 		(slot-value stream 'element-bits))))))
 
