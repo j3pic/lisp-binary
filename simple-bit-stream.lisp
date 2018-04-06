@@ -193,7 +193,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	      (slot-value stream 'real-stream))
 	 (write-sequence sequence (slot-value stream 'real-stream) :start start :end end))
 	(t (loop for ix from start to end
-	      do (write-byte (aref sequence ix) stream))
+	      do (write-byte (elt sequence ix) stream))
 	   sequence)))
 
 #-sbcl
