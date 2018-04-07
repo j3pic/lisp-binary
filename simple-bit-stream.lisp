@@ -346,12 +346,14 @@ will be. The result is an integer of BITS bits."
 	 (file-position (slot-value stream 'real-stream)))
 	(t (error "Not implemented for POSIX/Win32 descriptors."))))
 
+#-sbcl
+(defmethod (setf stream-file-position) (position-spec (stream bit-stream))
+  (setf (slot-value stream 'bits-left) 0)
+  (setf (slot-value stream 'last-byte) nil))
+  
 #+sbcl
 (defmethod sb-gray:stream-file-position  ((stream bit-stream) &optional position-spec)
-  (cond ((slot-value stream 'real-stream)
-	 (when position-spec
-	   (setf (slot-value stream 'bits-left) 0)
-	   (setf (slot-value stream 'last-byte) nil))
-	 (file-position (slot-value stream 'real-stream) position-spec))
-	(t
-	 (error "Not implemented for POSIX/Windows descriptors!"))))
+  (when position-spec
+    (setf (slot-value stream 'bits-left) 0)
+    (setf (slot-value stream 'last-byte) nil))
+  (file-position (slot-value stream 'real-stream) position-spec))
