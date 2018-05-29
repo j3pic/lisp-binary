@@ -35,7 +35,12 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :input-string-too-long
 	   :read-terminated-string :write-terminated-string :buffer :terminated-string
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
-	 :bad-value :required-value :fixed-length-string :fixed-string :bit-field :open-binary :with-open-binary-file :use-string-value))
+	 :bad-value :required-value :fixed-length-string :fixed-string :bit-field :open-binary :with-open-binary-file :use-string-value
+	 :half-float
+	 :single-float
+	 :double-float
+	 :quadruple-float
+	 :octuple-float))
 	 
 (in-package :lisp-binary)
 
