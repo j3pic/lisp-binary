@@ -954,9 +954,10 @@ returns the number of bytes that were written.
      1. A :TYPE specifier that can be spliced into a slot definition in a DEFSTRUCT form.
 
      2. A READER-FORM that can be spliced into another function to read a datum of the specified
-        type.
+        type. The READER-FORM will assume that it will be spliced into a scope where there's
+        a readable stream. The name of this stream must be stored in (SLOT-VALUE TYPE-INFO 'STREAM-SYMBOL).
 
-     3. A WRITER-FORM to write such a datum.
+     3. A WRITER-FORM to write such a datum. It can be spliced into a scope similar to that of the READER-FORM.
 
 TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 
