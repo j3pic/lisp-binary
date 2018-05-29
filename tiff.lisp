@@ -29,15 +29,10 @@
 	     (:normal-bits 2))
 
 (defbinary new-subfile-type (:byte-order :dynamic)
-    ((reserved
-      transparency-mask-p
-      one-of-many-pages-p
-      reduced-resolution-p) 0 :type (bit-field
-				     :raw-type (unsigned-byte 32)
-				     :member-types ((unsigned-byte 29)
-						    (unsigned-byte 1)
-						    (unsigned-byte 1)
-						    (unsigned-byte 1)))))
+  (reserved 0 :type (unsigned-byte 29))
+  (transparency-mask-p 0 :type (unsigned-byte 1))
+  (one-of-many-pages-p 0 :type (unsigned-byte 1))
+  (reduced-resolution-p 0 :type (unsigned-byte 1)))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   ;; TODO: Finish this. The number of possible tags is huge, and
