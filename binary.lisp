@@ -2523,7 +2523,8 @@ FLOATING-POINT NUMBERS
 									  write-form))
 							else collect write-form)
 						   collect `(incf ,byte-count-name ,processed-write-form)))
-			  collect `(,@(if (eq stream-name stream-symbol)
+			  collect `(,@(if (or (null stream-name)
+					      (eq stream-name stream-symbol))
 					  '(progn)
 					  `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
 										     :byte-order ,byte-order)))
