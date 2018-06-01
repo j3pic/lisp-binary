@@ -404,6 +404,9 @@ value is an integer."
      (when (nanp fraction)
        (return-from encode-float-bits/arithmetic
 	 (%make-quiet-nan significand-bits exponent-bits)))
+
+     (when (= fraction 0)
+       (return-from encode-float-bits/arithmetic 0))
      
      (let* ((denormalp (denormalp/arithmetic fraction significand-bits exponent-bits exponent-bias))
 	    (sign (if (> fraction 0)

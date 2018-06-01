@@ -1,0 +1,31 @@
+#!/bin/sh
+
+cd `dirname $0`
+yes | (
+sudo apt-get update
+sudo apt-get install wget --yes
+sudo apt-get install sbcl --yes
+)
+
+wget https://beta.quicklisp.org/quicklisp.lisp
+
+echo " Running SBCL version: " `sbcl --version`
+
+echo "<<<<<<<<<<<<<<<<<< STATS"
+echo
+free -h
+echo
+
+echo '>>>>>>>>>>>>>> INSTALLING QUICKLISP'
+
+yes '' | sbcl --script setup-test-environment.lisp
+
+( cd ..
+  dir=`pwd`
+  cd ..
+  cp -fdR $dir $HOME/quicklisp/local-projects
+)
+
+cp $HOME/.sbclrc init.lisp
+echo '>>>>>>>>>>>>>> RUNNING TEST'
+yes '' | sbcl --script run-tests.lisp

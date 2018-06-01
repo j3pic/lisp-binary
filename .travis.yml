@@ -1,0 +1,4 @@
+language: python
+sudo: enabled
+install: true
+script: test/run-tests

@@ -33,9 +33,14 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 
 	   :pad-fixed-length-string
 	   :input-string-too-long
-	   :read-terminated-string :write-terminated-string :buffer :terminated-string
+	   :read-terminated-string :write-terminated-string :buffer :terminated-string :terminated-buffer
 	 :counted-string :counted-buffer :counted-array :define-enum :read-enum :write-enum :magic :bad-magic-value
-	 :bad-value :required-value :fixed-length-string :fixed-string :bit-field :open-binary :with-open-binary-file :use-string-value))
+	 :bad-value :required-value :fixed-length-string :fixed-string :bit-field :open-binary :with-open-binary-file :use-string-value
+	 :half-float
+	 :single-float
+	 :double-float
+	 :quadruple-float
+	 :octuple-float))
 	 
 (in-package :lisp-binary)
 
@@ -222,7 +227,7 @@ Example:
        bytes-read))))
 
 (defun decode-ip-addr (raw-msb)
-  (declare (type (simple-array (unsigned-byte 8) (4)) raw-msb))
+  (declare (type (array (unsigned-byte 8) (4)) raw-msb))
   (with-output-to-string (*standard-output*)
     (format t "~{~a~^.~}" (loop for byte across raw-msb collect byte))))
 
@@ -265,6 +270,9 @@ specified BYTE-ORDER, then writes out the BUFFER."
 (defun array-pop (arr)
   (aref arr (decf (fill-pointer arr))))
 
+(defun make-simple-array (complex-arr element-type)
+  (make-array (length complex-arr) :element-type element-type))
+
 (defun read-terminated-string (stream &key (terminator (buffer 0)))
   "Reads a string ending in the byte sequence specified by TERMINATOR. The TERMINATOR is
 not included in the resulting buffer. The default is to read C-style strings, terminated
@@ -282,7 +290,8 @@ by a zero."
 	       (incf term-ix)
 	       (when (eq term-ix (length terminator))
 		 (loop repeat (length terminator) do (array-pop result))
-		 (return-from read-terminated-string (values result bytes-read))))))
+		 (return-from read-terminated-string (values (make-simple-array result '(unsigned-byte 8))
+							     bytes-read))))))
     (use-string-value (value)
       :report "Provide a string to use instead."
       :interactive (lambda ()
@@ -1053,6 +1062,19 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 					   ,stream-symbol
 					   :byte-order ,byte-order))
 		     (cond ((eq byte-order '*byte-order*)
+			    (setf reader* `(ecase *byte-order*
+					     (:big-endian
+					      (multiple-value-bind (,temp-var ,bytes-read)
+						  ,reader
+						(incf ,byte-count-name ,bytes-read)
+						(split-bit-field ,temp-var (list ,@field-sizes)
+								 ',signedness)))
+					     (:little-endian
+					      (multiple-value-bind (,temp-var ,bytes-read)
+						  ,reader
+						(incf ,byte-count-name ,bytes-read)
+						(split-bit-field ,temp-var (list ,@(reverse field-sizes))
+								 ',(reverse signedness))))))
 			    (setf writer* `(ecase *byte-order*
 					     (:little-endian
 					      (write-integer
@@ -1064,6 +1086,12 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 					       :byte-order ,byte-order))
 					     (:big-endian ,writer*))))
 			   ((eq byte-order :little-endian)
+			    (setf reader*
+				  `(multiple-value-bind (,temp-var ,bytes-read)
+				       ,reader
+				     (incf ,byte-count-name ,bytes-read)
+				     (split-bit-field ,temp-var (list ,@(reverse field-sizes))
+						      ',(reverse signedness))))
 			    (setf writer*
 				  `(write-integer
 				    (join-field-bits (list ,@(reverse field-sizes))
@@ -2518,7 +2546,8 @@ FLOATING-POINT NUMBERS
 									  write-form))
 							else collect write-form)
 						   collect `(incf ,byte-count-name ,processed-write-form)))
-			  collect `(,@(if (eq stream-name stream-symbol)
+			  collect `(,@(if (or (null stream-name)
+					      (eq stream-name stream-symbol))
 					  '(progn)
 					  `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
 										     :byte-order ,byte-order)))
