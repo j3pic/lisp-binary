@@ -29,6 +29,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 
 	   :wrap-in-bit-stream
 	   :with-wrapped-in-bit-stream
+	   :with-buffered-output
 
 	   :pad-fixed-length-string
 	   :input-string-too-long
@@ -113,6 +114,15 @@ by TYPE-SIZE")
 			    ,@(if if-does-not-exist
 				  `(:if-does-not-exist ,if-does-not-exist)))
      ,@body))
+
+(defmacro with-buffered-output ((var stream) &body body)
+  "Creates buffered output stream VAR. Data written to VAR will be written to STREAM after the BODY returns.
+This makes it possible to write binaries that require streams opened in :DIRECTION :IO to streams that are
+open in :DIRECTION :OUT"
+  (let ((buffer (gensym "buffer-")))
+    `(let ((,buffer (flexi-streams:with-output-to-sequence (,var :element-type '(unsigned-byte 8))
+		      ,@body)))
+       (write-bytes ,buffer ,stream))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *enum-definitions* (make-hash-table :test 'eq))

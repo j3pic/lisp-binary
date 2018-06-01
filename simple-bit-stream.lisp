@@ -190,10 +190,10 @@ can be discarded if BYTE-ALIGNED-P returns T."))
   (unless (>= end start)
     (return-from %stream-write-sequence sequence))
   (cond ((and (equal (slot-value stream 'bits-left) 0)
-	      (slot-value stream 'real-stream))
+	      (streamp (slot-value stream 'real-stream)))
 	 (write-sequence sequence (slot-value stream 'real-stream) :start start :end end))
 	(t (loop for ix from start to end
-	      do (write-byte (aref sequence ix) stream))
+	      do (write-byte (elt sequence ix) stream))
 	   sequence)))
 
 #-sbcl
@@ -210,11 +210,11 @@ can be discarded if BYTE-ALIGNED-P returns T."))
     (return-from %stream-read-sequence sequence))
   (init-read stream)
   (cond ((and (equal (slot-value stream 'bits-left) 0)
-	      (slot-value stream 'real-stream))
+	      (streamp (slot-value stream 'real-stream)))
 	 (read-sequence sequence (slot-value stream 'real-stream) :start start :end end))
 	(t
 	 (loop for ix from start below end
-	    do (setf (aref sequence ix) (read-byte stream))
+	    do (setf (elt sequence ix) (read-byte stream))
 	      count t))))
 
 #-sbcl
@@ -299,9 +299,7 @@ The byte order is determined from the STREAM object, which must be a SIMPLE-BIT-
 (defun read-bits (bits stream)
   "Reads BITS bits from STREAM. If the STREAM is big-endian, the most
 significant BITS bits will be read, otherwise, the least significant BITS bits
-will be. The result is an integer of BITS bits.
-
-TODO: Test this."
+will be. The result is an integer of BITS bits."
   (ecase (slot-value stream 'byte-order)
     (:little-endian
      (init-read stream)
@@ -348,12 +346,14 @@ TODO: Test this."
 	 (file-position (slot-value stream 'real-stream)))
 	(t (error "Not implemented for POSIX/Win32 descriptors."))))
 
+#-sbcl
+(defmethod (setf stream-file-position) (position-spec (stream bit-stream))
+  (setf (slot-value stream 'bits-left) 0)
+  (setf (slot-value stream 'last-byte) nil))
+  
 #+sbcl
 (defmethod sb-gray:stream-file-position  ((stream bit-stream) &optional position-spec)
-  (cond ((slot-value stream 'real-stream)
-	 (when position-spec
-	   (setf (slot-value stream 'bits-left) 0)
-	   (setf (slot-value stream 'last-byte) nil))
-	 (file-position (slot-value stream 'real-stream) position-spec))
-	(t
-	 (error "Not implemented for POSIX/Windows descriptors!"))))
+  (when position-spec
+    (setf (slot-value stream 'bits-left) 0)
+    (setf (slot-value stream 'last-byte) nil))
+  (file-position (slot-value stream 'real-stream) position-spec))
