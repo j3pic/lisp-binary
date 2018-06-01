@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x
+set -x -e -o pipefail
 
 cd `dirname $0`
 base_dir=`pwd`
@@ -10,20 +10,24 @@ sudo apt-get update
 sudo apt-get install wget --yes
 sudo apt-get install sbcl --yes
 sudo apt-get install clisp --yes
-wget -O /tmp/ccl.tar.gz https://github.com/Clozure/ccl/releases/download/v1.11.5/ccl-1.11.5-linuxx86.tar.gz
+wget -O $HOME/ccl.tar.gz https://github.com/Clozure/ccl/releases/download/v1.11.5/ccl-1.11.5-linuxx86.tar.gz
 )
 
-set -e -o pipefail
 
 
 (yes || true) | (
- cd /tmp
+ cd 
  tar -xzf ccl.tar.gz
+ pwd
+ ls -l
+ ls -l ccl
+ find . -name lx86cl
 )
 
 export base_dir
 
+$base_dir/test-on-implementation clisp .clisprc.lisp &
+$base_dir/test-on-implementation "$HOME/ccl/lx86cl64 -b -l" .ccl-init.lisp
 $base_dir/test-on-implementation 'sbcl --script' .sbclrc
-$base_dir/test-on-implementation clisp .clisprc.lisp
-$base_dir/test-on-implementation "/tmp/ccl/lx86cl -e '(progn (load "run-tests.lisp") (ccl:quit))'" .ccl-init.lisp
 
+kill -2 $$

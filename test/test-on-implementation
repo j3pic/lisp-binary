@@ -13,3 +13,4 @@ echo '>>>>>>>>>>>>>> RUNNING TEST'
 
 rm -rf ~/quicklisp
 rm -f init.lisp
+rm -rf quicklisp.lisp
