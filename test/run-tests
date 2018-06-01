@@ -1,11 +1,11 @@
 #!/bin/bash
 
-set -o -e pipefail
+set -x
 
 cd `dirname $0`
 base_dir=`pwd`
 
-yes | (
+(yes || true) | (
 sudo apt-get update
 sudo apt-get install wget --yes
 sudo apt-get install sbcl --yes
@@ -13,7 +13,10 @@ sudo apt-get install clisp --yes
 wget -O /tmp/ccl.tar.gz https://github.com/Clozure/ccl/releases/download/v1.11.5/ccl-1.11.5-linuxx86.tar.gz
 )
 
-yes | (
+set -e -o pipefail
+
+
+(yes || true) | (
  cd /tmp
  tar -xzf ccl.tar.gz
 )

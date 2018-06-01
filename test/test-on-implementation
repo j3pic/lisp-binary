@@ -1,13 +1,15 @@
 #!/bin/bash
 
+set -x -e -o pipefail
+
 LISP="$1"
 INIT=$HOME/"$2"
 
-$base_dir/install-quicklisp $LISP
+$base_dir/install-quicklisp "$LISP"
 
 cp $INIT init.lisp
 echo '>>>>>>>>>>>>>> RUNNING TEST'
-yes '' | sbcl --script run-tests.lisp
+(yes '' || true) | $LISP run-tests.lisp
 
 rm -rf ~/quicklisp
 rm -f init.lisp

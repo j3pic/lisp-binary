@@ -1,6 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
 LISP="$1"
+
+set -x -e -o pipefail
 
 wget https://beta.quicklisp.org/quicklisp.lisp
 
@@ -13,7 +15,7 @@ echo
 
 echo '>>>>>>>>>>>>>> INSTALLING QUICKLISP'
 
-yes '' | $LISP setup-test-environment.lisp
+(yes '' || true) | $LISP setup-test-environment.lisp
 
 ( cd ..
   dir=`pwd`
