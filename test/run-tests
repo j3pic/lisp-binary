@@ -9,6 +9,7 @@ yes | (
 sudo apt-get update
 sudo apt-get install wget --yes
 sudo apt-get install sbcl --yes
+sudo apt-get install clisp --yes
 )
 
 $base_dir/install-quicklisp "sbcl --script"
@@ -17,3 +18,10 @@ cp $HOME/.sbclrc init.lisp
 echo '>>>>>>>>>>>>>> RUNNING TEST'
 yes '' | sbcl --script run-tests.lisp
 
+rm -rf ~/quicklisp
+rm -f init.lisp
+
+$base_dir/install-quicklisp clisp
+cp $HOME/.clisprc init.lisp
+
+yes '' | clisp run-tests.lisp
