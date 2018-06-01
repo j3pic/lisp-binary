@@ -5,5 +5,6 @@
   t)
 
 (ql:add-to-init-file)
-#+(or sbcl clisp)(exit)
+#+sbcl (exit)
 #+ccl (ccl:quit)
+#+clisp (ext:exit)

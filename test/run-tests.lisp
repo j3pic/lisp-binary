@@ -7,4 +7,6 @@
 (format t "~%>>>>>>>>>> Test program successfully loaded~%")
 
 (lisp-binary-test::run-test)
-(exit)
+#+sbcl (exit)
+#+clisp (ext:exit)
+#+ccl (ccl:quit)
