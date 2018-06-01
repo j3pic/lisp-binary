@@ -1,0 +1,17 @@
+general:
+  branches:
+    ignore:
+      - /.*\/ci_skip.*/ # end your branch name in /ci_skip and it won't be built by CircleCI
+
+version: 2
+
+jobs:
+  build:
+    docker:
+      - image: debian:stretch
+    steps:
+      - checkout
+      - run: Do everything from a shell script
+        type: shell
+        command: test/run-tests
+
