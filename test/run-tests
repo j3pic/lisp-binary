@@ -18,25 +18,9 @@ yes | (
  tar -xzf ccl.tar.gz
 )
 
-$base_dir/install-quicklisp "sbcl --script"
+export base_dir
 
-cp $HOME/.sbclrc init.lisp
-echo '>>>>>>>>>>>>>> RUNNING TEST'
-yes '' | sbcl --script run-tests.lisp
-
-rm -rf ~/quicklisp
-rm -f init.lisp
-
-$base_dir/install-quicklisp clisp
-cp $HOME/.clisprc.lisp init.lisp
-
-yes '' | clisp run-tests.lisp
-
-rm -rf ~/quicklisp
-rm -f init.lisp
-
-$base_dir/install-quicklisp /tmp/ccl/lx86cl -e '(progn (load "run-tests.lisp") (ccl:quit))'
-cp $HOME/.ccl-init.lisp init.lisp
-
-yes '' | /tmp/lx86cl -e '(progn (load "run-tests.lisp") (ccl:quit))'
+$base_dir/test-on-implementation 'sbcl --script' .sbclrc
+$base_dir/test-on-implementation clisp .clisprc.lisp
+$base_dir/test-on-implementation "/tmp/ccl/lx86cl -e '(progn (load "run-tests.lisp") (ccl:quit))'" .ccl-init.lisp
 

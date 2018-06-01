@@ -1,0 +1,13 @@
+#!/bin/bash
+
+LISP="$1"
+INIT=$HOME/"$2"
+
+$base_dir/install-quicklisp $LISP
+
+cp $INIT init.lisp
+echo '>>>>>>>>>>>>>> RUNNING TEST'
+yes '' | sbcl --script run-tests.lisp
+
+rm -rf ~/quicklisp
+rm -f init.lisp
