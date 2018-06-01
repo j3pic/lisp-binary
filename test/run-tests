@@ -10,6 +10,12 @@ sudo apt-get update
 sudo apt-get install wget --yes
 sudo apt-get install sbcl --yes
 sudo apt-get install clisp --yes
+wget -O /tmp/ccl.tar.gz https://github.com/Clozure/ccl/releases/download/v1.11.5/ccl-1.11.5-linuxx86.tar.gz
+)
+
+yes | (
+ cd /tmp
+ tar -xzf ccl.tar.gz
 )
 
 $base_dir/install-quicklisp "sbcl --script"
@@ -22,6 +28,15 @@ rm -rf ~/quicklisp
 rm -f init.lisp
 
 $base_dir/install-quicklisp clisp
-cp $HOME/.clisprc init.lisp
+cp $HOME/.clisprc.lisp init.lisp
 
 yes '' | clisp run-tests.lisp
+
+rm -rf ~/quicklisp
+rm -f init.lisp
+
+$base_dir/install-quicklisp /tmp/ccl/lx86cl -e '(progn (load "run-tests.lisp") (ccl:quit))'
+cp $HOME/.ccl-init.lisp init.lisp
+
+yes '' | /tmp/lx86cl -e '(progn (load "run-tests.lisp") (ccl:quit))'
+
