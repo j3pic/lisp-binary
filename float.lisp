@@ -28,8 +28,8 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   #+(or sbcl ccl)
   (progn
-    (push :float-infinity *features*)
-    (push :float-quiet-nan *features*)))
+    (pushnew :float-infinity *features*)
+    (pushnew :float-quiet-nan *features*)))
 
 ;; Don't make these constants. Floating point arithmetic errors
 ;; were seen at COMPILE TIME in SBCL.
