@@ -1,5 +1,8 @@
+(format t "~%>>>>>>>>>>> Test program loading~%")
 (load "init.lisp")
+(format t "~%>>>>>>>>>>>>> Loaded init file~%")
 (load "asdf.lisp")
+(format t "~%>>>>>>>>>>>>> Loaded ASDF~%")
 (ql:quickload :lisp-binary)
 (format t "~%>>>>>>>> LISP-BINARY library successfully loaded~%")
 (load "basic-test.lisp")
@@ -7,4 +10,6 @@
 (format t "~%>>>>>>>>>> Test program successfully loaded~%")
 
 (lisp-binary-test::run-test)
-(exit)
+#+sbcl (exit)
+#+clisp (ext:exit)
+#+ccl (ccl:quit)

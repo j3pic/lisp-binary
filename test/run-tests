@@ -1,31 +1,32 @@
-#!/bin/sh
+#!/bin/bash
+
+set -x -e -o pipefail
 
 cd `dirname $0`
-yes | (
+base_dir=`pwd`
+
+(yes || true) | (
 sudo apt-get update
 sudo apt-get install wget --yes
 sudo apt-get install sbcl --yes
+sudo apt-get install clisp --yes
+wget -O $HOME/ccl.tar.gz 'https://github.com/Clozure/ccl/releases/download/v1.11/ccl-1.11-linuxx86.tar.gz'
 )
 
-wget https://beta.quicklisp.org/quicklisp.lisp
 
-echo " Running SBCL version: " `sbcl --version`
 
-echo "<<<<<<<<<<<<<<<<<< STATS"
-echo
-free -h
-echo
-
-echo '>>>>>>>>>>>>>> INSTALLING QUICKLISP'
-
-yes '' | sbcl --script setup-test-environment.lisp
-
-( cd ..
-  dir=`pwd`
-  cd ..
-  cp -fdR $dir $HOME/quicklisp/local-projects
+(yes || true) | (
+ cd 
+ tar -xzf ccl.tar.gz
+ pwd
+ ls -l
+ ls -l ccl
+ find . -name lx86cl
 )
 
-cp $HOME/.sbclrc init.lisp
-echo '>>>>>>>>>>>>>> RUNNING TEST'
-yes '' | sbcl --script run-tests.lisp
+export base_dir
+
+# $base_dir/test-on-implementation clisp .clisprc.lisp &
+$base_dir/test-on-implementation "$HOME/ccl/lx86cl64 -b -l" .ccl-init.lisp
+$base_dir/test-on-implementation 'sbcl --script' .sbclrc
+

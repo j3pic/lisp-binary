@@ -103,13 +103,13 @@
       (0.0d0 0.5d0 0.33333333d0)))))
 
 (defun octuple-precision-floating-point-test ()
-  (test-round-trip "OCTIPLE PRECISION FLOATING POINT TEST"
+  (test-round-trip "OCTUPLE PRECISION FLOATING POINT TEST"
 		   (write-binary-type 0 'octuple-float *standard-output*)
 		   (assert (= (read-binary-type 'octuple-float *standard-input*)
 			      0))))
 
 (defun octuple-precision-floating-point-test ()
-  (test-round-trip "OCTIPLE PRECISION FLOATING POINT TEST"
+  (test-round-trip "OCTUPLE PRECISION FLOATING POINT TEST"
 		   (write-binary-type 0 'octuple-float *standard-output*)
 		   (assert (= (read-binary-type 'octuple-float *standard-input*)
 			      0))))
