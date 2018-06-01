@@ -302,6 +302,9 @@ returns NIL"
 ;	 (lazily (cons ,obj ,place))))
 
 (defmacro pushover (obj* place &key (key '#'identity) (test '#'eql))
+  "Pushes the OBJ* into the PLACE. If an \"identical\" object is already there, it is overwritten.
+Whether something in the PLACE is considered \"identical\" can be controlled with the :TEST
+and :KEY keywords."
   (alexandria:with-gensyms (tail obj)
     `(let ((,obj ,obj*))
        (loop for ,tail on ,place
