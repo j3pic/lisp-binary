@@ -52,5 +52,13 @@
 (defun run-test ()
   (declare (optimize (safety 3) (debug 3) (speed 0)))
   (let ((simple-binary (make-simple-binary :blah 34)))
-    simple-binary))
+    (format t ">>>>>>>>>>>>>>>>>>>> OVERALL ROUND TRIP TEST~%")
+    (with-open-binary-file (out "/tmp/foobar.bin"
+				:direction :output
+				:if-exists :supersede)
+      (write-binary simple-binary out))
+    (with-open-binary-file (in "/tmp/foobar.bin")
+      (let ((input-binary (read-binary 'simple-binary in)))
+	(assert (equalp simple-binary input-binary))))))
+      
 					   
