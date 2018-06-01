@@ -1,0 +1,22 @@
+#!/bin/sh
+
+LISP="$1"
+
+wget https://beta.quicklisp.org/quicklisp.lisp
+
+echo " Running SBCL version: " `sbcl --version`
+
+echo "<<<<<<<<<<<<<<<<<< STATS"
+echo
+free -h
+echo
+
+echo '>>>>>>>>>>>>>> INSTALLING QUICKLISP'
+
+yes '' | $LISP setup-test-environment.lisp
+
+( cd ..
+  dir=`pwd`
+  cd ..
+  cp -fdR $dir $HOME/quicklisp/local-projects
+)
