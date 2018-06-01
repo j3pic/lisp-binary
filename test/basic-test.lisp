@@ -147,7 +147,8 @@
   (let ((terminated-buffer (make-with-terminated-buffer)))
     (test-round-trip "TERMINATED-BUFFER TEST"
 		     (write-binary terminated-buffer *standard-output*)
-		     (read-binary 'with-terminated-buffer *standard-input*))))
+		     (assert-equal terminated-buffer
+				   (read-binary 'with-terminated-buffer *standard-input*)))))
 
 (defun run-test ()
   (terminated-buffer-test)
