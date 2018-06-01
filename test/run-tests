@@ -2,9 +2,9 @@
 
 cd `dirname $0`
 yes | (
-apt-get update
-apt-get install wget --yes
-apt-get install sbcl --yes
+sudo apt-get update
+sudo apt-get install wget --yes
+sudo apt-get install sbcl --yes
 )
 
 wget https://beta.quicklisp.org/quicklisp.lisp
