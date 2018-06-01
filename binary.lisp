@@ -271,7 +271,9 @@ specified BYTE-ORDER, then writes out the BUFFER."
   (aref arr (decf (fill-pointer arr))))
 
 (defun make-simple-array (complex-arr element-type)
-  (make-array (length complex-arr) :element-type element-type))
+  (make-array (length complex-arr)
+	      :element-type element-type
+	      :initial-contents complex-arr))
 
 (defun read-terminated-string (stream &key (terminator (buffer 0)))
   "Reads a string ending in the byte sequence specified by TERMINATOR. The TERMINATOR is
