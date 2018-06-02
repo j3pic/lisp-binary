@@ -40,7 +40,8 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	 :single-float
 	 :double-float
 	 :quadruple-float
-	 :octuple-float))
+	 :octuple-float
+	 :+inf :-inf :quiet-nan :signalling-nan :nanp :infinityp))
 	 
 (in-package :lisp-binary)
 
