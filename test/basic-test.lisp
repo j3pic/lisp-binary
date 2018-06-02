@@ -3,6 +3,30 @@
 
 (in-package :lisp-binary-test)
 
+(load "unit-test")
+(use-package :unit-test)
+
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defmacro assert= (x y)
+    (let ((x* (gensym "X"))
+	  (y* (gensym "Y")))
+      `(let ((,x* ,x)
+	     (,y* ,y))
+	 (or (= ,x* ,y*)
+	     (error "~S != ~S" ,x* ,y*)))))
+
+  (defmacro assert-equalp (x y)
+    (let ((x* (gensym "X"))
+	  (y* (gensym "Y")))
+      `(let ((,x* ,x)
+	     (,y* ,y))
+	 (or (equalp ,x* ,y*)
+	     (error "~S is not EQUAL to ~S" ,x* ,y*))))))
+
+(load "single-field-tests")
+
+
 (declaim (optimize (debug 3) (safety 3) (speed 0)))
 
 (defbinary other-binary ()
@@ -76,14 +100,6 @@
   `(call-test-round-trip ,test-name (lambda () ,read-form)
 			 (lambda () ,write-form)))
 
-(defmacro assert-equal (x y)
-  (let ((x* (gensym "X"))
-	(y* (gensym "Y")))
-    `(let ((,x* ,x)
-	   (,y* ,y))
-       (or (equalp ,x* ,y*)
-       (error "~S is not EQUAL to ~S" ,x* ,y*)))))
-
 (defun simple-test ()
   (declare (optimize (safety 3) (debug 3) (speed 0)))
   (let ((simple-binary (make-simple-binary :blah 34)))
@@ -102,13 +118,13 @@
     ((double-precision-floating-point-test
       (0.0d0 0.5d0 0.33333333d0)))))
 
-(defun octuple-precision-floating-point-test ()
+(unit-test 'octuple-precision-floating-point-test ()
   (test-round-trip "OCTUPLE PRECISION FLOATING POINT TEST"
 		   (write-binary-type 0 'octuple-float *standard-output*)
 		   (assert (= (read-binary-type 'octuple-float *standard-input*)
 			      0))))
 
-(defun octuple-precision-floating-point-test ()
+(unit-test 'octuple-precision-floating-point-test 
   (test-round-trip "OCTUPLE PRECISION FLOATING POINT TEST"
 		   (write-binary-type 0 'octuple-float *standard-output*)
 		   (assert (= (read-binary-type 'octuple-float *standard-input*)
@@ -119,43 +135,51 @@
   (let ((other-binary (make-dynamic-other-binary :x 0 :y #x20)))
     (test-round-trip (format nil "BIT STREAMS - DYNAMIC BYTE ORDER ~a TEST" *byte-order*)
 		     (write-binary other-binary *standard-output*)
-		     (assert-equal (read-binary 'dynamic-other-binary *standard-input*)
-				   other-binary))))
+		     (assert-equalp (read-binary 'dynamic-other-binary *standard-input*)
+				    other-binary))))
 
 (defun other-binary-le-test ()
   (let ((other-binary (make-other-binary :x 0 :y #x20)))
     (test-round-trip (format nil "BIT STREAMS - STATIC BYTE ORDER LITTLE-ENDIAN TEST")
 		     (write-binary other-binary *standard-output*)
-		     (assert-equal (read-binary 'other-binary *standard-input*)
-				   other-binary))))
+		     (assert-equalp (read-binary 'other-binary *standard-input*)
+				    other-binary))))
 
 (defun other-binary-be-test ()
   (let ((other-binary (make-be-other-binary :x 0 :y #x20)))
     (test-round-trip (format nil "BIT STREAMS - STATIC BYTE ORDER BIG-ENDIAN TEST")
 		     (write-binary other-binary *standard-output*)
-		     (assert-equal (read-binary 'be-other-binary *standard-input*)
-				   other-binary))))
+		     (assert-equalp (read-binary 'be-other-binary *standard-input*)
+				    other-binary))))
 
 (defun other-binary-functions-test ()
   (let ((other-binary (make-other-binary :x 0 :y #x20)))
     (test-round-trip "OTHER-BINARY TEST"
 		     (write-other-binary other-binary *standard-output*)
-		     (assert-equal (read-other-binary *standard-input*)
-				   other-binary))))
+		     (assert-equalp (read-other-binary *standard-input*)
+				    other-binary))))
 
-(defun terminated-buffer-test ()
-  (let ((terminated-buffer (make-with-terminated-buffer)))
-    (test-round-trip "TERMINATED-BUFFER TEST"
-		     (write-binary terminated-buffer *standard-output*)
-		     (assert-equal terminated-buffer
-				   (read-binary 'with-terminated-buffer *standard-input*)))))
-
-(defun run-test ()
-  (terminated-buffer-test)
+(unit-test 'other-binary-test
   (other-binary-dynamic-test)
   (other-binary-dynamic-test :big-endian)
   (other-binary-le-test)
   (other-binary-be-test)
-  (other-binary-functions-test)
-  (octuple-precision-floating-point-test)
-  (simple-test))
+  (other-binary-functions-test))
+
+(unit-test 'terminated-buffer-test 
+  (let ((terminated-buffer (make-with-terminated-buffer)))
+    (test-round-trip "TERMINATED-BUFFER TEST"
+		     (write-binary terminated-buffer *standard-output*)
+		     (assert-equalp terminated-buffer
+				    (read-binary 'with-terminated-buffer *standard-input*)))))
+
+(defun run-test ()
+  (let ((test-results (do-tests)))
+    (format t ">>>>>>>>>>>>>>>>>>>>>>>> TEST RESULTS: ~S~%" test-results)
+    (when (loop for (name result) in test-results
+	     thereis (eq result :fail))
+      (format t "TEST FAILED")
+      (loop for (name result) in test-results
+	 when (eq result :fail)
+	 do (format t "~%~S~%" name)
+	   (unit-test::run-test name)))))
