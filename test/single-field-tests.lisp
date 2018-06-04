@@ -61,3 +61,18 @@
 	 
 	 
     
+(unit-test 'string-tests
+  (let ((ascii-string "The quick brown fox jumps over the lazy dog."))
+    (let ((counted-string-buffer (flexi-streams:with-output-to-sequence (out)
+				   (write-binary-type ascii-string '(counted-string 1))))
+	  (terminated-string-buffer (flexi-streams:with-output-to-sequence (out)
+				      (write-binary-type ascii-string '(terminated-string 1 :terminator 0) out))))
+      (assert= (aref counted-string-buffer 0) (length ascii-string))
+      (assert= (length counted-string-buffer (1+ (length ascii-string))))
+      (assert-equalp (read-binary-type '(counted-string 1) counted-string-buffer)
+		     ascii-string)
+      (assert= (aref terminated-string-buffer (1- (length terminated-string-buffer))) 0)
+      (assert= (length terminated-string-buffer) (1+ (length ascii-string)))
+      (assert-equalp (read-binary-type '(terminated-string 1 :terminator 0) out)
+		     ascii-string))))
+      
