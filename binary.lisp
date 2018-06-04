@@ -2558,7 +2558,9 @@ FLOATING-POINT NUMBERS
 					      (eq stream-name stream-symbol))
 					  '(progn)
 					  `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
-										     :byte-order ,byte-order)))
+										     :byte-order ,(if (eq byte-order :dynamic)
+												      '*byte-order*
+												      byte-order))))
 				      ,@body))
 				       
 		     ,byte-count-name))))
