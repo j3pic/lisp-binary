@@ -200,6 +200,10 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defmethod stream-write-sequence ((stream bit-stream) sequence start end &key &allow-other-keys)
   (%stream-write-sequence stream sequence (or start 0) (or end (1- (length sequence)))))
 
+#-sbcl
+(defmethod stream-write-vector ((stream bit-stream) vector start end)
+  (%stream-write-sequence stream vector (or start 0) (or end (1- (length vector)))))
+
 #+sbcl
 (defmethod sb-gray:stream-write-sequence ((stream bit-stream) seq &optional start end)
   (%stream-write-sequence stream seq (or start 0) (or end (length seq))))
