@@ -201,7 +201,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
   (%stream-write-sequence stream sequence (or start 0) (or end (1- (length sequence)))))
 
 #+ccl
-(defmethod stream-write-vector ((stream bit-stream) vector start end)
+(defmethod ccl:stream-write-vector ((stream bit-stream) vector start end)
   (%stream-write-sequence stream vector (or start 0) (or end (1- (length vector)))))
 
 #+sbcl
