@@ -173,6 +173,37 @@
 		     (assert-equalp terminated-buffer
 				    (read-binary 'with-terminated-buffer *standard-input*)))))
 
+(defbinary multi-byte-bit-fields (:byte-order :dynamic)
+  (x 256 :type (unsigned-byte 12))
+  (y 127 :type (unsigned-byte 12)))
+
+(defbinary implicit-bit-stream (:byte-order :dynamic)
+  (x 13 :type (unsigned-byte 4))
+  (f 1.5d0 :type double-float)
+  (y 10 :type (unsigned-byte 4)))
+
+(unit-test 'multi-byte-bit-field-test
+  (let ((struct (make-multi-byte-bit-fields)))
+    (assert= (slot-value struct 'x) 256)
+    (assert= (slot-value struct 'y) 127)
+    (loop for *byte-order* in '(:little-endian :big-endian)
+	 do
+	 (test-round-trip (format nil "MULTI BYTE BIT FIELD TEST (~a)" *byte-order*)
+			  (write-binary struct *standard-output*)
+			  (assert-equalp struct
+					 (read-binary 'multi-byte-bit-fields
+						      *standard-input*))))))
+
+(unit-test 'implicit-bit-stream-test
+  (let ((struct (make-implicit-bit-stream)))
+    (loop for *byte-order* in '(:little-endian :big-endian)
+       do
+	 (test-round-trip (format nil "IMPLICIT BIT STREAM TEST (~a)" *byte-order*)
+			  (write-binary struct *standard-output*)
+			  (assert-equalp struct
+					 (read-binary 'implicit-bit-stream
+						      *standard-input*))))))
+
 (defun run-test ()
   (let ((test-results (do-tests)))
     (format t ">>>>>>>>>>>>>>>>>>>>>>>> TEST RESULTS: ~S~%" test-results)

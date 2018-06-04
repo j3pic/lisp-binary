@@ -1627,7 +1627,7 @@ the NAME is bound to the slot's value."
 			,write-form)
 		     write-form))))
 
-(defun bitfield-spec->defstruct-specs (name options)
+(defun bitfield-spec->defstruct-specs (name default-values options)
   (check-type name list)
   (let ((type (getf options :type)))
     (check-type type list)
@@ -1636,8 +1636,9 @@ the NAME is bound to the slot's value."
       (error "In bitfield: Number of values ~a ~S doesn't match number of types ~a ~S"
 	     (length name) name (length type) type))
     (loop for real-name in name
+	 for default-value in default-values
        for real-type in type
-       collect `(,real-name 0 :type ,real-type ,@(remove-plist-keys options :type)))))
+       collect `(,real-name ,default-value :type ,real-type ,@(remove-plist-keys options :type)))))
 
 (defun find-bit-field-groups (list &key (key #'identity))
   "Identifies those fields in the LIST of fields that must be
@@ -1737,11 +1738,12 @@ Returns two values:
       n))
 
 (defun make-bit-field (source-fields)
-  (let ((types (mapcar 'expand-byte-shorthand
-		       (mapcar 'field-description-type source-fields))))
+  (let ((types (mapcar #'expand-byte-shorthand
+		       (mapcar #'field-description-type source-fields)))
+	(default-values (mapcar #'second source-fields)))
     (if (divisiblep (apply #'+ (mapcar 'type-size types)) 8)
 	`(,(mapcar #'car source-fields)
-	   0
+	   ,default-values
 	   :type (bit-field :member-types ,(loop for type in types
 					      collect (if (bit-field-type-p type)
 							  type
@@ -2198,6 +2200,9 @@ TYPES
 
             READ-BINARY will automatically separate the values in the bit field into their
             slots, and WRITE-BINARY will automatically OR them back together.
+           
+            The default value you specify for this field should be given as a list
+            of default values for each of the subfields.
 
         (CUSTOM &key reader writer (lisp-type t))
 
@@ -2469,7 +2474,7 @@ FLOATING-POINT NUMBERS
 	       for type = (getf options :type)
 	       if (listp name)
 	       append (bitfield-spec->defstruct-specs
-		       name options)
+		       name default-value options)
 	       else collect (list* name default-value :type type (remove-plist-keys options :type :bit-stream-id))))
 	(defmethod read-binary ((type (eql ',name)) ,(if bit-stream-required
 							 `(,stream-symbol bit-stream)
@@ -2553,7 +2558,9 @@ FLOATING-POINT NUMBERS
 					      (eq stream-name stream-symbol))
 					  '(progn)
 					  `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
-										     :byte-order ,byte-order)))
+										     :byte-order ,(if (eq byte-order :dynamic)
+												      '*byte-order*
+												      byte-order))))
 				      ,@body))
 				       
 		     ,byte-count-name))))

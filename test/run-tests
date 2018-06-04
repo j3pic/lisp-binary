@@ -27,6 +27,6 @@ wget -O $HOME/ccl.tar.gz 'https://github.com/Clozure/ccl/releases/download/v1.11
 export base_dir
 
 # $base_dir/test-on-implementation clisp .clisprc.lisp &
-$base_dir/test-on-implementation "$HOME/ccl/lx86cl64 -b -l" .ccl-init.lisp
 $base_dir/test-on-implementation 'sbcl --script' .sbclrc
+$base_dir/test-on-implementation "$HOME/ccl/lx86cl64 -b -l" .ccl-init.lisp
 
