@@ -10,7 +10,7 @@
                                     (when m (princ "." s)))))
                           (null "1.0"))))))
   (unless (string>= asdf-version "3.1.5")
-    (error "LISP-BINARY requires ASDF 3.1.5 or better. You have ~a" asdf-version)))
+    (pushnew :lisp-binary-upgrade-asdf *features*)))
 
 (asdf:defsystem :lisp-binary
   :author ("Jeremy Phelps")
@@ -21,6 +21,7 @@
 			   :cffi)
   :components
   ((:file "binary" :depends-on ("utils" "float" "integer" "simple-bit-stream" "reverse-stream"))
+   #+lisp-binary-upgrade-asdf (:file "asdf")
    (:file "simple-bit-stream" :depends-on ("integer"))
    (:file "reverse-stream" :depends-on ("integer"))
    (:file "integer" :depends-on ("utils"))
