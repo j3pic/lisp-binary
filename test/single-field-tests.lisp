@@ -1,14 +1,5 @@
 (in-package :lisp-binary-test)
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (defmacro assert= (x y)
-    (let ((x* (gensym "X"))
-	  (y* (gensym "Y")))
-      `(let ((,x* ,x)
-	     (,y* ,y))
-	 (or (= ,x* ,y*)
-	     (error "~S != ~S" ,x* ,y*))))))
-
 (unit-test 'read/write-integer-test
   (let* ((integer 2948)
 	 (le-buffer (flexi-streams:with-output-to-sequence (out)
