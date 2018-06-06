@@ -5,7 +5,7 @@ Instead, evaluate this:
 
 ```
 (push '*default-pathname-defaults* asdf:*central-registry*)
-(ql:quickload :lisp-binary-tests)
+(ql:quickload :lisp-binary-test)
 (lisp-binary-test::run-test)
 ```
 
