@@ -1,10 +1,18 @@
 (defpackage :lisp-binary-test
-  (:use :common-lisp :lisp-binary))
+  (:use :common-lisp :lisp-binary :unit-test))
 
 (in-package :lisp-binary-test)
 
-(load "unit-test")
-(use-package :unit-test)
+(declaim (optimize (debug 3) (safety 3) (speed 0)))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defmacro assert= (x y)
+    (let ((x* (gensym "X"))
+	  (y* (gensym "Y")))
+      `(let ((,x* ,x)
+	     (,y* ,y))
+	 (or (= ,x* ,y*)
+	     (error "~S != ~S" ,x* ,y*))))))
 
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -24,10 +32,7 @@
 	 (or (equalp ,x* ,y*)
 	     (error "~S is not EQUAL to ~S" ,x* ,y*))))))
 
-(load "single-field-tests")
 
-
-(declaim (optimize (debug 3) (safety 3) (speed 0)))
 
 (defbinary other-binary ()
   (x 1 :type (unsigned-byte 1))
@@ -107,16 +112,6 @@
 		     (write-binary simple-binary *standard-output*)
 		     (let ((input-binary (read-binary 'simple-binary *standard-input*)))
 		       (assert-equal simple-binary input-binary)))))
-
-(defconstant +round-trip-test-parameters+
-  `((octuple-precision-floating-point-test
-     (0 1/2 1/3)
-     'octuple-float)
-    ((quad-precision-floating-point-test
-      (0 1/2 1/3)
-      'quadruple-float))
-    ((double-precision-floating-point-test
-      (0.0d0 0.5d0 0.33333333d0)))))
 
 (unit-test 'octuple-precision-floating-point-test ()
   (test-round-trip "OCTUPLE PRECISION FLOATING POINT TEST"
