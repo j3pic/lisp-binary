@@ -69,3 +69,17 @@
 		       (read-binary-type '(terminated-string 1 :terminator 0) in))
 		     ascii-string))))
       
+(unit-test 'unicode-tests
+  (let ((unicode-string "ಠ_ಠ")
+	(fuck-buffer (flexi-streams:with-output-to-sequence (out)
+		       (write-binary-type "fuck" '(fixed-length-string 6
+						   :external-format :utf-8
+						   :padding-character #\KANNADA_LETTER_TTHA)))))
+    (assert-equalp (flexi-streams:with-input-from-sequence (in fuck-buffer)
+		     (read-binary-type 
+		      '(fixed-length-string 6
+			:external-format :utf-8
+			:padding-character #\KANNADA_LETTER_TTHA)
+		      in))
+		   "fuck")))
+    
