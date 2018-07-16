@@ -20,7 +20,8 @@
   :depends-on (:closer-mop :moptilities :flexi-streams :quasiquote-2.0
 			   :cffi)
   :components
-  ((:file "binary" :depends-on ("utils" "float" "integer" "simple-bit-stream" "reverse-stream"))
+  ((:file "binary-1" :depends-on ("utils" "float" "integer" "simple-bit-stream" "reverse-stream"))
+   (:file "binary-2" :depends-on ("utils" "float" "integer" "simple-bit-stream" "reverse-stream" "binary-1"))
    #+lisp-binary-upgrade-asdf (:file "asdf")
    (:file "simple-bit-stream" :depends-on ("integer"))
    (:file "reverse-stream" :depends-on ("integer"))
