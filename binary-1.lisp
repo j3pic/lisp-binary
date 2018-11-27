@@ -603,7 +603,7 @@ that would normally be bound must be added with a LET form."
 	 (,stream-symbol ,stream))
      (declare (ignorable ,stream-symbol ,byte-count-name))
      (let ,let-defs
-       (declare (ignorable ,@(loop for (var val) in let-defs collect var)))
+       (declare (ignorable ,@(loop for (var nil) in let-defs collect var)))
        ,reader-or-writer)))
 
 

@@ -8,8 +8,9 @@ base_dir=`pwd`
 (yes || true) | (
 sudo apt-get update
 sudo apt-get install wget --yes
-sudo apt-get install sbcl --yes
 sudo apt-get install clisp --yes
+sudo apt-get install make --yes
+wget -O $HOME/sbcl.tar.bz2 'http://prdownloads.sourceforge.net/sbcl/sbcl-1.4.13-x86-64-linux-binary.tar.bz2'
 wget -O $HOME/ccl.tar.gz 'https://github.com/Clozure/ccl/releases/download/v1.11/ccl-1.11-linuxx86.tar.gz'
 )
 
@@ -18,10 +19,9 @@ wget -O $HOME/ccl.tar.gz 'https://github.com/Clozure/ccl/releases/download/v1.11
 (yes || true) | (
  cd 
  tar -xzf ccl.tar.gz
- pwd
- ls -l
- ls -l ccl
- find . -name lx86cl
+ tar -xjf sbcl.tar.bz2
+ cd sbcl-1.4.13-x86-64-linux
+ sudo ./install.sh
 )
 
 export base_dir

@@ -202,7 +202,7 @@ Better performance could be acheived if INTEGER could be a FIXNUM, but it can't.
 
 (defun join-field-bits (field-bits field-signedness field-values)
   (let ((result 0))
-    (loop for (bits next-bits . rest-bits) 
+    (loop for (bits next-bits) 
        on field-bits
        for value in field-values
        for signed = (pop field-signedness)
