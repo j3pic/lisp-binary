@@ -7,7 +7,7 @@
 
 (defmacro warnings-to-errors (&body body)
   `(handler-bind (((and warning
-			(not asdf/parse-defsystem:bad-system-name))
+			(not asdf/parse-defsystem::bad-system-name))
 		   (lambda (exn) (error exn))))
      ,@body))
 
