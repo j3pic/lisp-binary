@@ -179,7 +179,7 @@ to a number."
 	    :report "Enter a different format to use"
 	    :interactive (lambda ()
 			   (format t "Supported formats:~%~%")
-			   (loop for (format . fuck) in *format-table*
+			   (loop for (format) in *format-table*
 			      do (format t "    ~s~%" format))
 			   (terpri)
 			   (format t "Format to use (unevaluated): ")
