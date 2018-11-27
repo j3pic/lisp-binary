@@ -23,4 +23,4 @@ echo '>>>>>>>>>>>>>> INSTALLING QUICKLISP'
   cp -fdR $dir $HOME/quicklisp/local-projects
 )
 
-echo -n $HOME/quicklisp/local-projects/ > local-projects-dir.txt
+echo -n $HOME/quicklisp/local-projects/lisp-binary/ > local-projects-dir.txt
