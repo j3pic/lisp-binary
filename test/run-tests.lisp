@@ -3,7 +3,15 @@
 (format t "~%>>>>>>>>>>>>> Loaded init file~%")
 (ql:quickload :asdf)
 (push '*default-pathname-defaults* asdf:*central-registry*)
-(ql:quickload :lisp-binary-test)
+
+(defmacro warnings-to-errors (&body body)
+  `(handler-bind ((warning
+		   (lambda (exn) (error exn))))
+     ,@body))
+
+(warnings-to-errors
+ (ql:quickload :lisp-binary-test))
+
 (format t "~%>>>>>>>> LISP-BINARY test system successfully loaded~%")
 
 (lisp-binary-test::run-test)
