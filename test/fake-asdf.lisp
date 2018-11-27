@@ -76,13 +76,14 @@ are always satisfied."
 				:device (pathname-device pathname)
 				:directory directory)))
     (if (equalp dirname #P"")
-	pathname
+	nil
 	dirname))))
 
 (defun fake-asdf-load (asd-pathname)
   "Load a system from a .asd file without ASDF."
   (let ((system-def (load-system-def asd-pathname)))
     (ql:quickload (getf system-def :depends-on))
-    (let ((*default-pathname-defaults* (dirname asd-pathname)))
+    (let ((*default-pathname-defaults* (or (dirname asd-pathname)
+					   *default-pathname-defaults*)))
       (loop for file in (determine-load-order (components system-def))
 	 do (load file)))))
