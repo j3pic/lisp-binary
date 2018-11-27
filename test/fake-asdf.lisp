@@ -31,8 +31,8 @@ are always satisfied."
 (defun read-all-forms (stream)
   (let ((eof (gensym)))
     (loop for next-form = (read stream nil eof)
-       until (eq form eof)
-	 collect form)))
+       until (eq next-form eof)
+	 collect next-form)))
 
 
 (defun recursive-find-if (pred tree)
