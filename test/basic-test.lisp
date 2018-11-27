@@ -1,3 +1,4 @@
+;; -*- eval: (put 'unit-test 'common-lisp-indent-function 2) -*-
 (defpackage :lisp-binary-test
   (:use :common-lisp :lisp-binary :unit-test))
 
@@ -202,7 +203,7 @@
 (defun run-test ()
   (let ((test-results (do-tests)))
     (format t ">>>>>>>>>>>>>>>>>>>>>>>> TEST RESULTS: ~S~%" test-results)
-    (when (loop for (name result) in test-results
+    (when (loop for (nil result) in test-results
 	     thereis (eq result :fail))
       (format t "TEST FAILED")
       (loop for (name result) in test-results
