@@ -15,6 +15,20 @@ are always satisfied."
 					     (list (car components)))
 				     load-order))))))
 
+(defmacro acond (&rest cases)
+    (let ((result nil))
+      (loop for (condition . body) in (reverse cases)
+	 do (setf result
+		  `(aif ,condition
+			(progn ,@body)
+			,result)))
+      result))
+
+(defmacro aif (test then &optional else)
+    `(let ((it ,test))
+       (if it ,then ,else)))
+
+
 
 (defun recursive-find-if (pred tree)
   (if (funcall pred tree)
@@ -36,18 +50,6 @@ are always satisfied."
 		 it)
 		(t (recursive-find item (cdr tree) :test test))))))
 
-(defmacro acond (&rest cases)
-    (let ((result nil))
-      (loop for (condition . body) in (reverse cases)
-	 do (setf result
-		  `(aif ,condition
-			(progn ,@body)
-			,result)))
-      result))
-
-(defmacro aif (test then &optional else)
-    `(let ((it ,test))
-       (if it ,then ,else)))
 
 (defun load-system-def (pathname)
   (with-open-file (in pathname)
