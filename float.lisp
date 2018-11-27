@@ -318,7 +318,7 @@ so I don't know what it should be for other types, nor what the largest denormal
       (decode-float-bits (1- (ash 1 (1- significand-bits))) :format format :result-type result-type))))
 
 (defparameter *denormals*
-  (loop for (format . rest) in *format-table*
+  (loop for (format) in *format-table*
      collect (list format (make-smallest-denormal format 'rational)
 		   (make-largest-denormal format 'rational))))
 
