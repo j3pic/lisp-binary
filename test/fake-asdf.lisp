@@ -15,9 +15,34 @@ are always satisfied."
 					     (list (car components)))
 				     load-order))))))
 
+
+(defun recursive-find-if (pred tree)
+  (if (funcall pred tree)
+      tree
+      (recursive-find nil tree
+		      :test (lambda (bullshit node)
+			      (declare (ignore bullshit))
+			      (funcall pred node)))))
+
+(defun recursive-find (item tree &key (test #'eql))
+  (acond ((null tree)
+	 nil)
+	((atom tree)
+	 (funcall test item tree))
+	((consp tree)
+	 (acond ((funcall test item (car tree))
+		 (car tree))
+		((recursive-find item (car tree) :test test)
+		 it)
+		(t (recursive-find item (cdr tree) :test test))))))
+
 (defun load-system-def (pathname)
   (with-open-file (in pathname)
-    (read in)))
+    (recursive-find-if
+     (lambda (form)
+       (and (consp form)
+	    (eq (car form) 'asdf:defsystem)))
+     (read in))))
 
 (defun components (system-def)
   (getf system-def :components))
