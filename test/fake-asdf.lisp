@@ -28,6 +28,11 @@ are always satisfied."
     `(let ((it ,test))
        (if it ,then ,else)))
 
+(defun read-all-forms (stream)
+  (let ((eof (gensym)))
+    (loop for next-form = (read stream nil eof)
+       until (eq form eof)
+	 collect form)))
 
 
 (defun recursive-find-if (pred tree)
@@ -57,7 +62,7 @@ are always satisfied."
      (lambda (form)
        (and (consp form)
 	    (eq (car form) 'asdf:defsystem)))
-     (read in))))
+     (read-all-forms in))))
 
 (defun components (system-def)
   (getf system-def :components))
