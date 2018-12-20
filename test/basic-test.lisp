@@ -190,6 +190,12 @@
 					 (read-binary 'multi-byte-bit-fields
 						      *standard-input*))))))
 
+;; I wrote a program that generated a bunch of warnings. This
+;; should be enough to reproduce it.
+
+(defbinary packet ()
+  (data (buffer) :type (counted-buffer 32)))
+
 (unit-test 'implicit-bit-stream-test
   (let ((struct (make-implicit-bit-stream)))
     (loop for *byte-order* in '(:little-endian :big-endian)
