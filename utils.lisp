@@ -138,7 +138,9 @@ after it.
 	   do (setf result
 		    `(,(if (multiple-value-binding-p (car bindings))
 			   let-values
-			   let) ,(reverse bindings) ,result)))
+			   let) ,(reverse bindings) ,@(if (eq (car result) 'progn)
+							  (cdr result)
+							  (list result)))))
 	result))))
   
 (defmacro let-values* (bindings &body body)
@@ -153,7 +155,9 @@ to a list of variables, and will expand to a nested MULTIPLE-VALUE-BIND expressi
   (let ((result `(progn ,@body)))
     (loop for (variables expression) in (reverse bindings)
        do (setf result `(multiple-value-bind ,variables ,expression
-			  ,result)))
+			  ,@(if (eq (car result) 'progn)
+				(cdr result)
+				(list result)))))
     result))
 
 (defun recursive-map (function tree)
