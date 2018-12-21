@@ -122,7 +122,7 @@
 
 (unit-test 'fixed-string-test
     (let ((binary-field-object (expand-defbinary-field "12345678"
-						       :type '(fixed-string 8 :padding-character 1))))
+						       :type '(fixed-string 8 :padding-character (code-char 1)))))
       (assert-equalp (slot-value binary-field-object 'lisp-binary::defstruct-field)
 		     '(*field* "12345678" :type string))
       (with-read-stream (buffer 49 50 51 52 53 54 55 56 12 12 12 12 12)
@@ -190,7 +190,7 @@
 				       :writer (lambda (obj stream)
 						 (write-byte obj stream)
 						 1)
-				       :lisp-type '(unsigned-byte 8))
+				       :lisp-type (unsigned-byte 8))
 			       :bind-index-to *index*))
 				       
 			       
@@ -198,8 +198,8 @@
 						      :type type)))
     (assert-equalp (slot-value binary-field-object 'lisp-binary::defstruct-field)
 		   `(*field* ,(coerce #() 'simple-array) :type (simple-array (unsigned-byte 8))))
-    (with-read-stream (buffer 1 2)
+    (with-read-stream (buffer 1 14)
       (multiple-value-bind (byte bytes-read)
 	  (call-form binary-field-object *stream* :read-form)
-	(assert= byte 2)
+	(assert-equalp byte (buffer 14))
 	(assert= bytes-read 2)))))
