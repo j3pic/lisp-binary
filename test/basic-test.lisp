@@ -223,9 +223,9 @@
       (with-local-pointer-resolving-context
 	(test-round-trip "POINTER/BASE-POINTER/REGION TEST"
 			 (write-binary outer *standard-output*)
-			 (assert-equal outer
-				       (read-binary 'pointer-test-outer
-						    *standard-input*))
+			 (assert-equalp outer
+					(read-binary 'pointer-test-outer
+						     *standard-input*))
 			 :out-direction :io))))
 
 ;; I wrote a program that generated a bunch of warnings. This
