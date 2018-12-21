@@ -157,7 +157,7 @@
     (let ((binary-field-object (expand-defbinary-field (buffer 1 2 3)
 						       :type '(counted-buffer 1))))
       (assert-equalp (slot-value binary-field-object 'lisp-binary::defstruct-field)
-		     '(*field* "foobar" :type (simple-array (unsigned-byte 8))))
+		     `(*field* ,(buffer 1 2 3) :type (simple-array (unsigned-byte 8))))
       (with-read-stream (buffer 3 1 2 3)
 	(multiple-value-bind (buf bytes-read)
 	    (call-form binary-field-object *stream* :read-form)
@@ -167,3 +167,39 @@
 		     (with-write-stream-to-buffer
 		       (let ((*field* (buffer 4 3 2 1)))
 			 (call-form binary-field-object *stream* :write-form))))))
+
+(unit-test 'counted-array-test
+    (let* ((array-of-strings (coerce (vector "one" "two" "three") 'simple-array))
+	   (binary-field-object (expand-defbinary-field array-of-strings
+							:type '(counted-array 1 (counted-string 1)
+								:bind-index-to *index*))))
+      (with-read-stream (buffer 3 3 111 110 101 3 116 119 111 5 116 104 114 101 101)
+	(multiple-value-bind (value bytes-read)
+	    (call-form binary-field-object *stream* :read-form)
+	  (assert-equalp value array-of-strings)
+	  (assert= bytes-read 15)))
+      (assert-equalp (buffer 3 3 111 110 101 3 116 119 111 5 116 104 114 101 101)
+		     (with-write-stream-to-buffer
+		       (let ((*field* array-of-strings))
+			 (call-form binary-field-object *stream* :write-form)))))
+  
+  (let* ((type `(counted-array 1
+			       (custom :reader (lambda (stream)
+						 (assert= *index* 0)
+						 (values (read-byte stream) 1))
+				       :writer (lambda (obj stream)
+						 (write-byte obj stream)
+						 1)
+				       :lisp-type '(unsigned-byte 8))
+			       :bind-index-to *index*))
+				       
+			       
+	 (binary-field-object (expand-defbinary-field (coerce #() 'simple-array)
+						      :type type)))
+    (assert-equalp (slot-value binary-field-object 'lisp-binary::defstruct-field)
+		   `(*field* ,(coerce #() 'simple-array) :type (simple-array (unsigned-byte 8))))
+    (with-read-stream (buffer 1 2)
+      (multiple-value-bind (byte bytes-read)
+	  (call-form binary-field-object *stream* :read-form)
+	(assert= byte 2)
+	(assert= bytes-read 2)))))
