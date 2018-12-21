@@ -139,7 +139,7 @@
 
 (unit-test 'counted-string-test
     (let ((binary-field-object (expand-defbinary-field "foobar"
-						       :type (counted-string 8))))
+						       :type '(counted-string 8))))
       (assert-equalp (slot-value binary-field-object 'lisp-binary::defstruct-field)
 		     '(*field* "foobar" :type string))
       (with-read-stream (buffer 5 0 0 0 0 0 0 0 120 121 122 122 121)
@@ -152,3 +152,18 @@
 		       (let ((*field* "xyzzy"))
 			 (call-form binary-field-object *stream* :write-form))))))
 		     
+
+(unit-test 'counted-buffer-test
+    (let ((binary-field-object (expand-defbinary-field (buffer 1 2 3)
+						       :type '(counted-buffer 1))))
+      (assert-equalp (slot-value binary-field-object 'lisp-binary::defstruct-field)
+		     '(*field* "foobar" :type (simple-array (unsigned-byte 8))))
+      (with-read-stream (buffer 3 1 2 3)
+	(multiple-value-bind (buf bytes-read)
+	    (call-form binary-field-object *stream* :read-form)
+	  (assert-equalp buf (buffer 1 2 3))
+	  (assert= bytes-read 4)))
+      (assert-equalp (buffer 4 4 3 2 1)
+		     (with-write-stream-to-buffer
+		       (let ((*field* (buffer 4 3 2 1)))
+			 (call-form binary-field-object *stream* :write-form))))))
