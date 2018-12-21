@@ -61,3 +61,18 @@
 	  (assert= *field* 2)
 	  (assert-equal (assoc '*field* lisp-binary::*base-pointer-tags*)
 			'(*field* . 2))))))
+
+(unit-test 'file-position-test
+    (let ((binary-field-object (expand-defbinary-field 0 :type 'file-position)))
+      (assert-equal (slot-value binary-field-object 'lisp-binary::defstruct-field)
+		    '(*field* 0 :type integer))
+      (with-read-stream (buffer 0 0 0)
+	(read-bytes 2 *stream*)
+	(multiple-value-bind (file-position bytes-read)
+	    (call-form binary-field-object *stream* :read-form)
+	  (assert= bytes-read 0)
+	  (assert= file-position 2)))
+      (with-write-stream-to-buffer
+	(write-bytes (buffer 0 0) *stream*)
+	(assert= (call-form binary-field-object *stream* :write-form) 0)
+	(assert= *field* 2))))
