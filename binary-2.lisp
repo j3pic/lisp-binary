@@ -166,7 +166,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	    :where (eq type 'region-tag)
 	    (setf reader* `(values ,base-pointer-name 0))
 	    (setf writer* `(dump-tag ',name (if ,base-pointer-name
-						(get-base-pointer-tag ,base-pointer-name)
+						(get-base-pointer-tag ',base-pointer-name)
 						0) ,stream-symbol))
 	    (push name *ignore-on-write*)
 	    '(:type t))
