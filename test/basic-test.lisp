@@ -228,6 +228,31 @@
 						     *standard-input*))
 			 :out-direction :io))))
 
+(defbinary pointer-test-inner-no-base-pointer ()
+  (pointer-1 0 :type (pointer :pointer-type (unsigned-byte 16)
+			      :data-type (counted-string 1)
+			      :region-tag 'the-region))
+  (pointer-2 0 :type (pointer :pointer-type (unsigned-byte 16)
+			      :data-type (unsigned-byte 8)
+			      :region-tag 'the-region)))
+
+(defbinary pointer-test-no-base-pointer ()
+  (thing-with-pointers nil :type pointer-test-inner)
+  (the-region nil :type (region-tag)))
+
+
+(unit-test 'pointer/region-test
+    (let* ((inner (make-pointer-test-inner :pointer-1 "The string I chose for the test."
+					  :pointer-2 #x7f))
+	   (outer (make-pointer-test-outer :thing-with-pointers inner)))
+      (with-local-pointer-resolving-context
+	(test-round-trip "POINTER/REGION TEST (no base pointer)"
+			 (write-binary outer *standard-output*)
+			 (assert-equalp outer
+					(read-binary 'pointer-test-outer
+						     *standard-input*))
+			 :out-direction :io))))
+
 ;; I wrote a program that generated a bunch of warnings. This
 ;; should be enough to reproduce it.
 
