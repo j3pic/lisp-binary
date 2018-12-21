@@ -1085,7 +1085,7 @@ TYPES
 
     The virtual types are:
 
-        (COUNTED-ARRAY count-size-in-bytes element-type)
+        (COUNTED-ARRAY count-size-in-bytes element-type &key bind-index-to)
 
             This is a SIMPLE-ARRAY preceded by an integer specifying how many
             elements are in it. The SIMPLE-ARRAY example above could be rewritten to use
