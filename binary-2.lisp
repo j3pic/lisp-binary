@@ -1470,19 +1470,16 @@ FLOATING-POINT NUMBERS
 		(previous-defs-symbol (gensym "PREVIOUS-DEFS-SYMBOL-"))
 		(most-recent-byte-count (gensym "MOST-RECENT-BYTE-COUNT-"))
 		(form-value (gensym "FORM-VALUE-"))
-		(parse-field-descriptions-fn
-		 (lambda (field-descriptions)
-		   (loop for f in field-descriptions
-		      collect (apply #'expand-defbinary-field
-				     (append (list name) f `(:stream-symbol ,stream-symbol :byte-count-name ,byte-count-name
-									    :previous-defs-symbol ,previous-defs-symbol)
-					     (if (field-option f :byte-order)
-						 nil
-						 `(:byte-order ,(if (eq byte-order :dynamic)
-								    '*byte-order*
-								    byte-order))))))))
 		((field-descriptions bit-stream-required) (convert-to-bit-fields field-descriptions))
-		(fields (funcall parse-field-descriptions-fn field-descriptions))
+		(fields (loop for f in field-descriptions
+			   collect (apply #'expand-defbinary-field
+					  (append (list name) f `(:stream-symbol ,stream-symbol :byte-count-name ,byte-count-name
+										 :previous-defs-symbol ,previous-defs-symbol)
+						  (if (field-option f :byte-order)
+						      nil
+						      `(:byte-order ,(if (eq byte-order :dynamic)
+									 '*byte-order*
+									 byte-order)))))))
 		(name-and-options (if defstruct-options
 				      (cons name
 					    (remove-plist-keys defstruct-options :byte-order))
