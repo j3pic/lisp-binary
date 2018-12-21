@@ -76,3 +76,25 @@
 	(write-bytes (buffer 0 0) *stream*)
 	(assert= (call-form binary-field-object *stream* :write-form) 0)
 	(assert= *field* 2))))
+
+
+(unit-test 'custom-type-test
+    (let ((binary-field-object (expand-defbinary-field nil :type `(custom :reader ,(lambda (stream)
+											   (values (read-byte stream) 1))
+									  :writer ,(lambda (obj stream)
+											   (write-byte obj stream)
+											   1)
+									  :lisp-type (unsigned-byte 4)))))
+      (assert-equal (slot-value binary-field-object 'lisp-binary::defstruct-field)
+		    '(*field* nil :type (unsigned-byte 4)))
+      (with-read-stream (buffer 15)
+	(multiple-value-bind (byte bytes-read)
+	    (call-form binary-field-object *stream* :read-form)
+	  (assert= byte 15)
+	  (assert= bytes-read 1)))
+      (assert-equalp
+       (with-write-stream-to-buffer
+	 (let ((*field* 15))
+	   (assert= (call-form binary-field-object *stream* :write-form) 1)))
+       (buffer 15))))
+	 
