@@ -1202,12 +1202,12 @@ TYPES
                (defbinary bar ()
                  (pointer-1 nil :type (pointer :pointer-type (unsigned-byte 16)
                                                :data-type  (terminated-string 1)
-                                               :base-pointer-name foo-base
-                                               :region-tag foo-region))
+                                               :base-pointer-name 'foo-base
+                                               :region-tag 'foo-region))
                  (pointer-2 0   :type (pointer :pointer-type (unsigned-byte 16)
                                                :data-type quadruple-float
-                                               :base-pointer-name foo-base
-                                               :region-tag foo-region)))
+                                               :base-pointer-name 'foo-base
+                                               :region-tag 'foo-region)))
  
 
                (defbinary foo ()
