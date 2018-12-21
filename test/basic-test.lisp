@@ -202,12 +202,12 @@
 (defbinary pointer-test-inner ()
   (pointer-1 0 :type (pointer :pointer-type (unsigned-byte 16)
 			      :data-type (counted-string 1)
-			      :base-pointer-name 'base
-			      :region-tag 'the-region))
+			      :base-pointer-name base
+			      :region-tag the-region))
   (pointer-2 0 :type (pointer :pointer-type (unsigned-byte 16)
 			      :data-type (unsigned-byte 8)
-			      :base-pointer-name 'base
-			      :region-tag 'the-region)))
+			      :base-pointer-name base
+			      :region-tag the-region)))
 
 (defbinary pointer-test-outer ()
   (magic #xff :type (magic :actual-type (unsigned-byte 8)
@@ -231,10 +231,10 @@
 (defbinary pointer-test-inner-no-base-pointer ()
   (pointer-1 0 :type (pointer :pointer-type (unsigned-byte 16)
 			      :data-type (counted-string 1)
-			      :region-tag 'the-region))
+			      :region-tag the-region))
   (pointer-2 0 :type (pointer :pointer-type (unsigned-byte 16)
 			      :data-type (unsigned-byte 8)
-			      :region-tag 'the-region)))
+			      :region-tag the-region)))
 
 (defbinary pointer-test-no-base-pointer ()
   (thing-with-pointers nil :type pointer-test-inner)

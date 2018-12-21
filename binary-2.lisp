@@ -165,8 +165,8 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	   ((type &key base-pointer-name)
 	    :where (eq type 'region-tag)
 	    (setf reader* `(values nil 0))
-	    (setf writer* `(dump-tag ',name (if ,base-pointer-name
-						(get-base-pointer-tag ',base-pointer-name)
+	    (setf writer* `(dump-tag ',name ,(if base-pointer-name
+						`(get-base-pointer-tag ',base-pointer-name)
 						0) ,stream-symbol))
 	    (push name *ignore-on-write*)
 	    '(:type t))
@@ -184,7 +184,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 									  pbr2 pv2)
 				    `(let* ((,pointer-bytes-read nil)
 					    (,base-pointer-address ,(if base-pointer-name
-									`(get-base-pointer-tag ,base-pointer-name)
+									`(get-base-pointer-tag ',base-pointer-name)
 									0))
 					    (,pointer-value (+ ,base-pointer-address
 							       (multiple-value-bind (,pv2 ,pbr2)
@@ -207,7 +207,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		    (setf writer* (alexandria:with-gensyms (closure)
 				    `(let ((,closure (lambda (,name ,stream-symbol)
 						       ,data-writer)))
-				       (queue-write-pointer ,region-tag (file-position ,stream-symbol)
+				       (queue-write-pointer ',region-tag (file-position ,stream-symbol)
 							    ;; Trying to figure out the size, byte order, and
 							    ;; signedness of the pointer by analyzing the code
 							    ;; that was generated to write it.
@@ -1202,12 +1202,12 @@ TYPES
                (defbinary bar ()
                  (pointer-1 nil :type (pointer :pointer-type (unsigned-byte 16)
                                                :data-type  (terminated-string 1)
-                                               :base-pointer-name 'foo-base
-                                               :region-tag 'foo-region))
+                                               :base-pointer-name foo-base
+                                               :region-tag foo-region))
                  (pointer-2 0   :type (pointer :pointer-type (unsigned-byte 16)
                                                :data-type quadruple-float
-                                               :base-pointer-name 'foo-base
-                                               :region-tag 'foo-region)))
+                                               :base-pointer-name foo-base
+                                               :region-tag foo-region)))
  
 
                (defbinary foo ()
