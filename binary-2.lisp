@@ -164,9 +164,9 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 	    '(:type integer))
 	   ((type &key base-pointer-name)
 	    :where (eq type 'region-tag)
-	    (setf reader* `(values ,base-pointer-name 0))
-	    (setf writer* `(dump-tag ',name (if ,base-pointer-name
-						(get-base-pointer-tag ,base-pointer-name)
+	    (setf reader* `(values nil 0))
+	    (setf writer* `(dump-tag ',name ,(if base-pointer-name
+						`(get-base-pointer-tag ',base-pointer-name)
 						0) ,stream-symbol))
 	    (push name *ignore-on-write*)
 	    '(:type t))
@@ -184,7 +184,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 									  pbr2 pv2)
 				    `(let* ((,pointer-bytes-read nil)
 					    (,base-pointer-address ,(if base-pointer-name
-									`(get-base-pointer-tag ,base-pointer-name)
+									`(get-base-pointer-tag ',base-pointer-name)
 									0))
 					    (,pointer-value (+ ,base-pointer-address
 							       (multiple-value-bind (,pv2 ,pbr2)
@@ -207,7 +207,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 		    (setf writer* (alexandria:with-gensyms (closure)
 				    `(let ((,closure (lambda (,name ,stream-symbol)
 						       ,data-writer)))
-				       (queue-write-pointer ,region-tag (file-position ,stream-symbol)
+				       (queue-write-pointer ',region-tag (file-position ,stream-symbol)
 							    ;; Trying to figure out the size, byte order, and
 							    ;; signedness of the pointer by analyzing the code
 							    ;; that was generated to write it.
@@ -1085,7 +1085,7 @@ TYPES
 
     The virtual types are:
 
-        (COUNTED-ARRAY count-size-in-bytes element-type)
+        (COUNTED-ARRAY count-size-in-bytes element-type &key bind-index-to)
 
             This is a SIMPLE-ARRAY preceded by an integer specifying how many
             elements are in it. The SIMPLE-ARRAY example above could be rewritten to use
@@ -1464,38 +1464,29 @@ FLOATING-POINT NUMBERS
 "
   (setf defstruct-options
 	(remove-plist-keys defstruct-options :export :byte-order :byte-count-name :align :preserve-*byte-order*))
-  (let* ((stream-symbol (gensym "STREAM-SYMBOL-"))
-	 (*ignore-on-write* nil)
-	 (bit-stream-groups (make-hash-table))
-	 (bit-stream-required nil)
-	 (previous-defs-symbol (gensym "PREVIOUS-DEFS-SYMBOL-"))
-	 (most-recent-byte-count (gensym "MOST-RECENT-BYTE-COUNT-"))
-	 (form-value (gensym "FORM-VALUE-"))
-	 (parse-field-descriptions-fn
-	  (lambda (field-descriptions)
-	    (loop for f in field-descriptions
-		     collect (apply #'expand-defbinary-field
-				    (append (list name) f `(:stream-symbol ,stream-symbol :byte-count-name ,byte-count-name
-									   :previous-defs-symbol ,previous-defs-symbol)
-					    (if (field-option f :byte-order)
-						nil
-						`(:byte-order ,(if (eq byte-order :dynamic)
-								   '*byte-order*
-								   byte-order))))))))
-	 (fields (funcall parse-field-descriptions-fn field-descriptions))
-	 (name-and-options (if defstruct-options
-			       (cons name
-				     (remove-plist-keys defstruct-options :byte-order))
-			       name))
-	 (previous-defs nil))    
+  (let-values* ((stream-symbol (gensym "STREAM-SYMBOL-"))
+		(*ignore-on-write* nil)
+		(bit-stream-groups (make-hash-table))
+		(previous-defs-symbol (gensym "PREVIOUS-DEFS-SYMBOL-"))
+		(most-recent-byte-count (gensym "MOST-RECENT-BYTE-COUNT-"))
+		(form-value (gensym "FORM-VALUE-"))
+		((field-descriptions bit-stream-required) (convert-to-bit-fields field-descriptions))
+		(fields (loop for f in field-descriptions
+			   collect (apply #'expand-defbinary-field
+					  (append (list name) f `(:stream-symbol ,stream-symbol :byte-count-name ,byte-count-name
+										 :previous-defs-symbol ,previous-defs-symbol)
+						  (if (field-option f :byte-order)
+						      nil
+						      `(:byte-order ,(if (eq byte-order :dynamic)
+									 '*byte-order*
+									 byte-order)))))))
+		(name-and-options (if defstruct-options
+				      (cons name
+					    (remove-plist-keys defstruct-options :byte-order))
+				      name))
+		(previous-defs nil))    
     (declare (optimize (safety 3)))
-    (multiple-value-bind (converted bit-stream-required*)
-	(convert-to-bit-fields field-descriptions)
-      (setf bit-stream-required (and (eq bit-stream-required* :bit-stream-required)
-				     t))
-      (unless (equal field-descriptions converted)		   
-	(setf fields (funcall parse-field-descriptions-fn converted))
-	(setf field-descriptions converted)))
+    
     (pushover (cons name field-descriptions) *known-defbinary-types*
 	      :key #'car)
     (loop for f in fields do

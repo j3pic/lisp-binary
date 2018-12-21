@@ -23,15 +23,23 @@
       `(let ((,x* ,x)
 	     (,y* ,y))
 	 (or (= ,x* ,y*)
-	     (error "~S != ~S" ,x* ,y*)))))
+	     (error "~S != ~S" ,x* ,y*)))))    
 
+  (defmacro assert-equal (x y)
+    (let ((x* (gensym "X"))
+	  (y* (gensym "Y")))
+      `(let ((,x* ,x)
+	     (,y* ,y))
+	 (or (equal ,x* ,y*)
+	     (error "~S is not EQUAL to ~S" ,x* ,y*)))))
+  
   (defmacro assert-equalp (x y)
     (let ((x* (gensym "X"))
 	  (y* (gensym "Y")))
       `(let ((,x* ,x)
 	     (,y* ,y))
 	 (or (equalp ,x* ,y*)
-	     (error "~S is not EQUAL to ~S" ,x* ,y*))))))
+	     (error "~S is not EQUALP to ~S" ,x* ,y*))))))
 
 
 
@@ -90,11 +98,11 @@
   (body (make-array 0 :element-type '(unsigned-byte 8))
 	:type (simple-array (unsigned-byte 8) (size))))
 
-(defun call-test-round-trip (test-name write-thunk read-thunk)
+(defun call-test-round-trip (test-name write-thunk read-thunk &key (out-direction :output))
   (format t ">>>>>>>>>>>>>>>>>>>>> ~a~%" test-name)
   (format t "Writing data....~%")
   (with-open-binary-file (*standard-output* "/tmp/foobar.bin"
-					    :direction :output
+					    :direction out-direction
 					    :if-exists :supersede)
     (funcall write-thunk))
   (format t "Reading it back...~%")
@@ -102,9 +110,10 @@
     (funcall read-thunk)))
 					   
 
-(defmacro test-round-trip (test-name read-form write-form)
+(defmacro test-round-trip (test-name read-form write-form &key (out-direction :output))
   `(call-test-round-trip ,test-name (lambda () ,read-form)
-			 (lambda () ,write-form)))
+			 (lambda () ,write-form)
+			 :out-direction ,out-direction))
 
 (defun simple-test ()
   (declare (optimize (safety 3) (debug 3) (speed 0)))
@@ -189,6 +198,60 @@
 			  (assert-equalp struct
 					 (read-binary 'multi-byte-bit-fields
 						      *standard-input*))))))
+
+(defbinary pointer-test-inner ()
+  (pointer-1 0 :type (pointer :pointer-type (unsigned-byte 16)
+			      :data-type (counted-string 1)
+			      :base-pointer-name base
+			      :region-tag the-region))
+  (pointer-2 0 :type (pointer :pointer-type (unsigned-byte 16)
+			      :data-type (unsigned-byte 8)
+			      :base-pointer-name base
+			      :region-tag the-region)))
+
+(defbinary pointer-test-outer ()
+  (magic #xff :type (magic :actual-type (unsigned-byte 8)
+			   :value #xff))
+  (base 0 :type base-pointer)
+  (thing-with-pointers nil :type pointer-test-inner)
+  (the-region nil :type (region-tag :base-pointer-name base)))
+
+(unit-test 'pointer/base-pointer/region-test
+    (let* ((inner (make-pointer-test-inner :pointer-1 "The string I chose for the test."
+					  :pointer-2 #x7f))
+	   (outer (make-pointer-test-outer :thing-with-pointers inner)))
+      (with-local-pointer-resolving-context
+	(test-round-trip "POINTER/BASE-POINTER/REGION TEST"
+			 (write-binary outer *standard-output*)
+			 (assert-equalp outer
+					(read-binary 'pointer-test-outer
+						     *standard-input*))
+			 :out-direction :io))))
+
+(defbinary pointer-test-inner-no-base-pointer ()
+  (pointer-1 0 :type (pointer :pointer-type (unsigned-byte 16)
+			      :data-type (counted-string 1)
+			      :region-tag the-region))
+  (pointer-2 0 :type (pointer :pointer-type (unsigned-byte 16)
+			      :data-type (unsigned-byte 8)
+			      :region-tag the-region)))
+
+(defbinary pointer-test-no-base-pointer ()
+  (thing-with-pointers nil :type pointer-test-inner)
+  (the-region nil :type (region-tag)))
+
+
+(unit-test 'pointer/region-test
+    (let* ((inner (make-pointer-test-inner :pointer-1 "The string I chose for the test."
+					  :pointer-2 #x7f))
+	   (outer (make-pointer-test-outer :thing-with-pointers inner)))
+      (with-local-pointer-resolving-context
+	(test-round-trip "POINTER/REGION TEST (no base pointer)"
+			 (write-binary outer *standard-output*)
+			 (assert-equalp outer
+					(read-binary 'pointer-test-outer
+						     *standard-input*))
+			 :out-direction :io))))
 
 ;; I wrote a program that generated a bunch of warnings. This
 ;; should be enough to reproduce it.
