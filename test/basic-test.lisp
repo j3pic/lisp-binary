@@ -23,15 +23,23 @@
       `(let ((,x* ,x)
 	     (,y* ,y))
 	 (or (= ,x* ,y*)
-	     (error "~S != ~S" ,x* ,y*)))))
+	     (error "~S != ~S" ,x* ,y*)))))    
 
+  (defmacro assert-equal (x y)
+    (let ((x* (gensym "X"))
+	  (y* (gensym "Y")))
+      `(let ((,x* ,x)
+	     (,y* ,y))
+	 (or (equal ,x* ,y*)
+	     (error "~S is not EQUAL to ~S" ,x* ,y*)))))
+  
   (defmacro assert-equalp (x y)
     (let ((x* (gensym "X"))
 	  (y* (gensym "Y")))
       `(let ((,x* ,x)
 	     (,y* ,y))
 	 (or (equalp ,x* ,y*)
-	     (error "~S is not EQUAL to ~S" ,x* ,y*))))))
+	     (error "~S is not EQUALP to ~S" ,x* ,y*))))))
 
 
 

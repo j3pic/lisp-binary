@@ -6,5 +6,6 @@
   :depends-on (:lisp-binary)
   :components
   ((:file "unit-test")
-    (:file "basic-test" :depends-on ("unit-test"))
-    (:file "single-field-tests" :depends-on ("basic-test"))))
+   (:file "basic-test" :depends-on ("unit-test"))
+   (:file "single-field-tests" :depends-on ("basic-test"))
+   (:file "type-field-expansion-tests" :depends-on ("basic-test"))))
