@@ -38,6 +38,7 @@
   (sift (lambda (result)
 	  (eq (second result) :fail))
 	(mapcar (lambda (test)
+		  (format t "~%>>>>> ~a~%" (first test))
 		  (list (first test)
 			(restart-case
 			    (progn
