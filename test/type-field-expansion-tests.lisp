@@ -98,3 +98,24 @@
 	   (assert= (call-form binary-field-object *stream* :write-form) 1)))
        (buffer 15))))
 	 
+(unit-test 'magic-number-test
+    (let ((binary-field-object (expand-defbinary-field nil
+						       :type '(magic :actual-type (unsigned-byte 8)
+							       :value #x56))))
+      (with-read-stream (buffer 15)
+	(handler-case
+	    (progn
+	      (call-form binary-field-object *stream* :read-form)
+	      (error "No BAD-MAGIC-VALUE error!"))
+	  (bad-magic-value ()
+	    t)))
+      (with-read-stream (buffer #x56)
+	(multiple-value-bind (magic bytes-read)
+	    (call-form binary-field-object *stream* :read-form)
+	  (assert= magic #x56)
+	  (assert= bytes-read 1)))
+      (assert-equalp
+       (with-write-stream-to-buffer
+	 (let ((*field* nil))
+	   (call-form binary-field-object *stream* :write-form)))
+       (buffer #x56))))
