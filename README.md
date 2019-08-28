@@ -57,7 +57,7 @@ read the data from a stream.
 The DEFBINARY macro can generate code to automatically read and write
 the following types of data:
 
-* Signed (Two's complement) and unsigned integers of all sizes, including non-byte-aligned sizes.
+* Signed (one's complement or two's complement) and unsigned integers of all sizes, including non-byte-aligned sizes.
 * Checked magic numbers
 * Bit fields
 * Floating point values in IEEE half, single, double, quadruple, and octuple precision formats.
