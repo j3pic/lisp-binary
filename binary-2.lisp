@@ -486,12 +486,15 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 					      :byte-order ,byte-order :align ,align
 					      :element-align ,element-align))
 	    '(:type t))
-	   ((byte-type bits) :where (member byte-type '(unsigned-byte signed-byte))
+	   ((byte-type bits &key (signed-representation :twos-complement))
+	    :where (member byte-type '(unsigned-byte signed-byte))
 	      (setf reader* `(read-integer ,(/ bits 8) ,stream-symbol
 					   :byte-order ,byte-order
-					   :signed ,(eq byte-type 'signed-byte)))
+					   :signed ,(eq byte-type 'signed-byte)
+					   :signed-representation ,signed-representation))
 	      (setf writer* `(write-integer ,name ,(/ bits 8) ,stream-symbol
 					    :byte-order ,byte-order
+					    :signed-representation ,signed-representation
 					    :signed ,(eq byte-type 'signed-byte)))
 	    `(:type (,byte-type ,bits)))
 	   ((float-type &key (byte-order byte-order))
@@ -1048,14 +1051,19 @@ TYPES
 
     Out of the Common Lisp types, DEFBINARY knows how to read:
 
-        (UNSIGNED-BYTE n) and (SIGNED-BYTE n), where N is the number of bits.
-        Since these types are used so frequently in DEFBINARY structs, there is a shorthand
-        for them: You can simply use the number of bits as the type. Positive for unsigned,
-        and negative for signed. Example:
+        (UNSIGNED-BYTE n) and (SIGNED-BYTE n &key (signed-representation :twos-complement), 
+        where N is the number of bits. Since these types are used so frequently in DEFBINARY
+        structs, there is a shorthand for them: You can simply use the number of bits as the
+        type. Positive for unsigned, and negative for signed (two's complement only). Example:
 
             (defbinary foobar ()
               (x 0 :type 16)  ;; 16-bit unsigned
               (y 1 :type -16)) ;; 16-bit signed
+
+        If you need to read one's complement, it must be written out:
+
+            (defbinary foobar ()
+              (x 0 :type (signed-byte 16 :signed-representation :ones-complement)))
 
         float, short-float, half-float, single-float, double-float, quadruple-float,
         and octuple-float.
