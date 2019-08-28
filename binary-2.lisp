@@ -215,7 +215,7 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 								((write-integer number size stream &key (byte-order :little-endian)
 										(signed-representation :twos-complement)
 										signed)
-								 (declare (ignore write-integer number stream))
+								 (declare (ignore write-integer number stream signed-representation))
 								 (list size byte-order signed))
 								(otherwise
 								 (restart-case
