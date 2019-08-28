@@ -5,6 +5,10 @@ set -x -e -o pipefail
 cd `dirname $0`
 base_dir=`pwd`
 
+pushd /etc/apt/sources.list.d
+sudo rm -f pgdg.list
+popd
+
 (yes || true) | (
 sudo apt-get update
 sudo apt-get install wget --yes
