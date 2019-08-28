@@ -47,7 +47,7 @@
   (reverse (encode-lsb number bytes)))
 (declaim (inline encode-msb))
 
-(defun signed->unsigned/bits (n bits type)
+(defun signed->unsigned/bits (n bits)
   (let ((negative-offset (expt 2 bits)))
     (if (< n 0)
 	(the integer (+ n negative-offset))
@@ -57,7 +57,7 @@
   (let ((n (ecase type
 	     (:twos-complement n)
 	     (:ones-complement (ones-complement->twos-complement n)))))
-    (signed->unsigned/bits n (* 8 bytes) type)))
+    (signed->unsigned/bits n (* 8 bytes))))
 
 (defun twos-complement->ones-complement (n bits)
   "Given a number that has been decoded as two's complement,
