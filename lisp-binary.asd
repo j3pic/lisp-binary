@@ -1,3 +1,4 @@
+#-lisp-binary/never-use-own-asdf
 (let ((asdf-version (when (find-package :asdf)
                       (let ((ver (symbol-value
                                   (or (find-symbol (string :*asdf-version*) :asdf)
@@ -22,7 +23,8 @@
   :components
   ((:file "binary-1" :depends-on ("utils" "float" "integer" "simple-bit-stream" "reverse-stream"))
    (:file "binary-2" :depends-on ("utils" "float" "integer" "simple-bit-stream" "reverse-stream" "binary-1"))
-   #+lisp-binary-upgrade-asdf (:file "asdf")
+   #+(and lisp-binary-upgrade-asdf
+	  (not lisp-binary/never-use-own-asdf)) (:file "asdf")
    (:file "simple-bit-stream" :depends-on ("integer"))
    (:file "reverse-stream" :depends-on ("integer"))
    (:file "integer" :depends-on ("utils"))
