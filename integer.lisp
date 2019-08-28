@@ -53,8 +53,34 @@
 	(the integer (+ n negative-offset))
 	n)))
 
-(defun signed->unsigned (n bytes)
-  (signed->unsigned/bits n (* 8 bytes)))
+(defun signed->unsigned (n bytes &optional (type :twos-complement))
+  (let ((n (ecase type
+	     (:twos-complement n)
+	     (:ones-complement (ones-complement->twos-complement n)))))
+    (signed->unsigned/bits n (* 8 bytes))))
+
+(defun twos-complement->ones-complement (n bits)
+  "Given a number that has been decoded as two's complement,
+correct it to what its value should be if the original bits
+were a one's complement representation."
+  (cond ((>= n 0)
+	 n)
+	((= n (1- (expt 2 bits)))
+	 0)
+	(t
+	 (1+ n))))
+
+(defun ones-complement->twos-complement (n)
+  "Given a number that has been decoded as one's complement,
+correct it to what its value should be if the original bits
+were a two's complement representation. This function doesn't
+need the number of bits because all ones in one's complement
+represents 'negative zero', a value that can't be represented
+in Common Lisp integers."
+  (if (>= n 0)
+      n
+      (1- n)))
+	
 
 (defun unsigned->signed/bits (n bits)
   (let* ((negative-offset (expt 2 bits))
@@ -63,8 +89,11 @@
 	(- n negative-offset)
 	n)))
 
-(defun unsigned->signed (n bytes)
-  (unsigned->signed/bits n (* 8 bytes)))
+(defun unsigned->signed (n bytes &key (type :twos-complement))
+  (let ((twos-complement (unsigned->signed/bits n (* 8 bytes))))
+    (ecase type
+      (:twos-complement twos-complement)
+      (:ones-complement (twos-complement->ones-complement twos-complement (* 8 bytes))))))
 
 (defgeneric write-bytes (buffer stream &optional bytes)
   (:documentation "Write BYTES bytes of the BUFFER into the STREAM. If
@@ -106,9 +135,11 @@ to that function should match the one given to this function."))
   (let ((result (make-array n :element-type element-type)))
     (values result (read-sequence result stream))))
 
-(defun write-integer (number size stream &key (byte-order :little-endian) signed)
+(defun write-integer (number size stream &key (byte-order :little-endian)
+					   (signed-representation :twos-complement)
+					   signed)
   (when signed
-    (setf number (signed->unsigned number size)))
+    (setf number (signed->unsigned number size signed-representation)))
   (cond ((integerp size)
 	 (write-bytes (ecase byte-order
 			((:big-endian) (encode-msb number size))
@@ -124,7 +155,40 @@ to that function should match the one given to this function."))
 			    number (1+ whole-bytes))))
 	     (write-bytes too-big stream size)))))
 
-(defun read-integer (length stream &key (byte-order :little-endian) signed)
+(defmacro tlabels (labels &body body)
+  `(labels ,(loop for (name args . bod) in labels
+	       for gs = (gensym)
+	       collect `(,name ,args
+			       (let ((,gs (progn ,@bod)))
+				 (format t "~s returned ~s~%"
+					 (list ',name ,@args)
+					 ,gs)
+				 ,gs)))
+     ,@body))
+
+(defmacro tif (expr if-t if-nil)
+  (let ((expr* (gensym))
+	(res (gensym)))
+    `(let ((,expr* ,expr))
+       (if ,expr*
+	   (let ((,res ,if-t))
+	     (format t "IF condition: ~s~%Test result: TRUE~%Value: ~S~%"
+		     ,expr* ,res)
+	     ,res)
+	   (let ((,res ,if-nil))
+	     (format t "IF condition: ~s~%Test result: FALSE~%Value: ~S~%"
+		     ,expr* ,res)
+	     ,res)))))
+
+(defun ash* (&rest integers)
+  (apply #'ash integers))
+
+(defun logior* (&rest args)
+  (apply #'logior args))
+
+(defun read-integer (length stream &key (byte-order :little-endian)
+				     signed
+				     (signed-representation :twos-complement))
   "Reads an integer of LENGTH bytes from the STREAM in the specified BYTE-ORDER.
 
 If SIGNED is non-NIL, the number is interpreted as being in two's complement format.
@@ -139,12 +203,21 @@ If the STREAM is a BIT-STREAM, then the LENGTH doesn't have to be an integer."
 			  (aref bytes (1- (length bytes)))))
 	  (extra-bits (multiple-value-bind (whole frac) (floor bytes-read)
 			(declare (ignore whole))
-			     (* frac 8))))
+			(* frac 8))))
       (labels ((add-extra-bits (int)
 		 (if partial-byte
 		     (ecase byte-order
 		       (:big-endian
 			(logior
+			 ;; Note: SBCL 1.4.13.debian claims that both
+			 ;; calls to ASH are unreachable, and prints
+			 ;; the message "deleting unreachable code"
+			 ;; for them. Yet, I have confirmed through
+			 ;; extensive tracing that the code is
+			 ;; indeed executed, and removing it changes
+			 ;; the return value of READ-INTEGER in
+			 ;; the relevant case (where BIT-STREAMs are
+			 ;; involved)
 			 (ash int extra-bits)
 			 partial-byte))
 		       (:little-endian
@@ -165,7 +238,7 @@ If the STREAM is a BIT-STREAM, then the LENGTH doesn't have to be an integer."
 			 ((:little-endian) (decode-lsb* bytes))
 			 (otherwise (error "Invalid byte order: ~a" byte-order)))))
 	   (if signed
-	       (unsigned->signed result length)
+	       (unsigned->signed result length :type signed-representation)
 	       result))
 	 bytes-read)))))
 

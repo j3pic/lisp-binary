@@ -212,40 +212,42 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 							    ;; signedness of the pointer by analyzing the code
 							    ;; that was generated to write it.
 							    ,@(destructuring-case (recursive-find-sublist '(write-integer) pointer-writer)
-										  ((write-integer number size stream &key (byte-order :little-endian) signed)
-										   (declare (ignore write-integer number stream))
-										   (list size byte-order signed))
-										  (otherwise
-										   (restart-case
-										       (error "Can't determine the format of a pointer of type ~a" pointer-type)
-										     (use-type (new-pointer-type)
-										       :report "Enter a different pointer type to use"
-										       :interactive (lambda ()
-												      (format t "Enter the new type: ")
-												      (list (read)))
-										       (letf (((slot-value type-info 'type)
-											       `(pointer :pointer-type ,new-pointer-type
-													:data-type ,data-type
-													:base-pointer-name ,base-pointer-name
-													:region-tag ,region-tag)))
-											 (return-from expand-defbinary-type-field
-											   (expand-defbinary-type-field struct-name type-info))))
-										     (enter-parameters (size byte-order signedness)
-										       :report "Enter the pointer parameters manually"
-										       :interactive (lambda ()
-												      (list (progn
-													      (format t "Enter the size in bytes of the pointer: ")
-													      (eval (read)))
-													    (progn
-													      (format t "Enter the byte order of the pointer (:LITTLE-ENDIAN or :BIG-ENDIAN): ")
-													      (eval (read)))
-													    (progn
-													      (format t "Is it signed? (Y/n): ")
-													      (if (find #\n (read-line)
-															:test #'equalp)
-														  nil
-														  t))))
-										       (list size byte-order signedness)))))
+								((write-integer number size stream &key (byte-order :little-endian)
+										(signed-representation :twos-complement)
+										signed)
+								 (declare (ignore write-integer number stream signed-representation))
+								 (list size byte-order signed))
+								(otherwise
+								 (restart-case
+								     (error "Can't determine the format of a pointer of type ~a" pointer-type)
+								   (use-type (new-pointer-type)
+								     :report "Enter a different pointer type to use"
+								     :interactive (lambda ()
+										    (format t "Enter the new type: ")
+										    (list (read)))
+								     (letf (((slot-value type-info 'type)
+									     `(pointer :pointer-type ,new-pointer-type
+										       :data-type ,data-type
+										       :base-pointer-name ,base-pointer-name
+										       :region-tag ,region-tag)))
+								       (return-from expand-defbinary-type-field
+									 (expand-defbinary-type-field struct-name type-info))))
+								   (enter-parameters (size byte-order signedness)
+								     :report "Enter the pointer parameters manually"
+								     :interactive (lambda ()
+										    (list (progn
+											    (format t "Enter the size in bytes of the pointer: ")
+											    (eval (read)))
+											  (progn
+											    (format t "Enter the byte order of the pointer (:LITTLE-ENDIAN or :BIG-ENDIAN): ")
+											    (eval (read)))
+											  (progn
+											    (format t "Is it signed? (Y/n): ")
+											    (if (find #\n (read-line)
+												      :test #'equalp)
+												nil
+												t))))
+								     (list size byte-order signedness)))))
 							    ,name ,closure)
 				       (let ((,name 0))
 					 ,pointer-writer))))
@@ -486,12 +488,15 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 					      :byte-order ,byte-order :align ,align
 					      :element-align ,element-align))
 	    '(:type t))
-	   ((byte-type bits) :where (member byte-type '(unsigned-byte signed-byte))
+	   ((byte-type bits &key (signed-representation :twos-complement))
+	    :where (member byte-type '(unsigned-byte signed-byte))
 	      (setf reader* `(read-integer ,(/ bits 8) ,stream-symbol
 					   :byte-order ,byte-order
-					   :signed ,(eq byte-type 'signed-byte)))
+					   :signed ,(eq byte-type 'signed-byte)
+					   :signed-representation ,signed-representation))
 	      (setf writer* `(write-integer ,name ,(/ bits 8) ,stream-symbol
 					    :byte-order ,byte-order
+					    :signed-representation ,signed-representation
 					    :signed ,(eq byte-type 'signed-byte)))
 	    `(:type (,byte-type ,bits)))
 	   ((float-type &key (byte-order byte-order))
@@ -1048,14 +1053,19 @@ TYPES
 
     Out of the Common Lisp types, DEFBINARY knows how to read:
 
-        (UNSIGNED-BYTE n) and (SIGNED-BYTE n), where N is the number of bits.
-        Since these types are used so frequently in DEFBINARY structs, there is a shorthand
-        for them: You can simply use the number of bits as the type. Positive for unsigned,
-        and negative for signed. Example:
+        (UNSIGNED-BYTE n) and (SIGNED-BYTE n &key (signed-representation :twos-complement), 
+        where N is the number of bits. Since these types are used so frequently in DEFBINARY
+        structs, there is a shorthand for them: You can simply use the number of bits as the
+        type. Positive for unsigned, and negative for signed (two's complement only). Example:
 
             (defbinary foobar ()
               (x 0 :type 16)  ;; 16-bit unsigned
               (y 1 :type -16)) ;; 16-bit signed
+
+        If you need to read one's complement, it must be written out:
+
+            (defbinary foobar ()
+              (x 0 :type (signed-byte 16 :signed-representation :ones-complement)))
 
         float, short-float, half-float, single-float, double-float, quadruple-float,
         and octuple-float.

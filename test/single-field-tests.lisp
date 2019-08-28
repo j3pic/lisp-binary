@@ -69,3 +69,21 @@
 		       (read-binary-type '(terminated-string 1 :terminator 0) in))
 		     ascii-string))))
       
+(unit-test 'ones-complement-test
+    (let ((buffer (flexi-streams:with-output-to-sequence (out)
+		    (write-integer #xf0 1 out :byte-order :big-endian))))
+      (loop for (complement value)
+	 in '((:ones-complement -15)
+	      (:twos-complement -16))
+	   do
+	   (assert= (flexi-streams:with-input-from-sequence (in buffer)
+		      (read-binary-type `(signed-byte 8 :signed-representation ,complement)
+					in :byte-order :big-endian))
+		    value)
+	   (assert-equalp (flexi-streams:with-output-to-sequence (out)
+			    (write-binary-type value `(signed-byte 8 :signed-representation ,complement)
+					       out :byte-order :big-endian))
+			  buffer))))
+      
+      
+				   
