@@ -212,40 +212,42 @@ TYPE-INFO is a DEFBINARY-TYPE that contains the following:
 							    ;; signedness of the pointer by analyzing the code
 							    ;; that was generated to write it.
 							    ,@(destructuring-case (recursive-find-sublist '(write-integer) pointer-writer)
-										  ((write-integer number size stream &key (byte-order :little-endian) signed)
-										   (declare (ignore write-integer number stream))
-										   (list size byte-order signed))
-										  (otherwise
-										   (restart-case
-										       (error "Can't determine the format of a pointer of type ~a" pointer-type)
-										     (use-type (new-pointer-type)
-										       :report "Enter a different pointer type to use"
-										       :interactive (lambda ()
-												      (format t "Enter the new type: ")
-												      (list (read)))
-										       (letf (((slot-value type-info 'type)
-											       `(pointer :pointer-type ,new-pointer-type
-													:data-type ,data-type
-													:base-pointer-name ,base-pointer-name
-													:region-tag ,region-tag)))
-											 (return-from expand-defbinary-type-field
-											   (expand-defbinary-type-field struct-name type-info))))
-										     (enter-parameters (size byte-order signedness)
-										       :report "Enter the pointer parameters manually"
-										       :interactive (lambda ()
-												      (list (progn
-													      (format t "Enter the size in bytes of the pointer: ")
-													      (eval (read)))
-													    (progn
-													      (format t "Enter the byte order of the pointer (:LITTLE-ENDIAN or :BIG-ENDIAN): ")
-													      (eval (read)))
-													    (progn
-													      (format t "Is it signed? (Y/n): ")
-													      (if (find #\n (read-line)
-															:test #'equalp)
-														  nil
-														  t))))
-										       (list size byte-order signedness)))))
+								((write-integer number size stream &key (byte-order :little-endian)
+										(signed-representation :twos-complement)
+										signed)
+								 (declare (ignore write-integer number stream))
+								 (list size byte-order signed))
+								(otherwise
+								 (restart-case
+								     (error "Can't determine the format of a pointer of type ~a" pointer-type)
+								   (use-type (new-pointer-type)
+								     :report "Enter a different pointer type to use"
+								     :interactive (lambda ()
+										    (format t "Enter the new type: ")
+										    (list (read)))
+								     (letf (((slot-value type-info 'type)
+									     `(pointer :pointer-type ,new-pointer-type
+										       :data-type ,data-type
+										       :base-pointer-name ,base-pointer-name
+										       :region-tag ,region-tag)))
+								       (return-from expand-defbinary-type-field
+									 (expand-defbinary-type-field struct-name type-info))))
+								   (enter-parameters (size byte-order signedness)
+								     :report "Enter the pointer parameters manually"
+								     :interactive (lambda ()
+										    (list (progn
+											    (format t "Enter the size in bytes of the pointer: ")
+											    (eval (read)))
+											  (progn
+											    (format t "Enter the byte order of the pointer (:LITTLE-ENDIAN or :BIG-ENDIAN): ")
+											    (eval (read)))
+											  (progn
+											    (format t "Is it signed? (Y/n): ")
+											    (if (find #\n (read-line)
+												      :test #'equalp)
+												nil
+												t))))
+								     (list size byte-order signedness)))))
 							    ,name ,closure)
 				       (let ((,name 0))
 					 ,pointer-writer))))

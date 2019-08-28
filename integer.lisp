@@ -135,9 +135,11 @@ to that function should match the one given to this function."))
   (let ((result (make-array n :element-type element-type)))
     (values result (read-sequence result stream))))
 
-(defun write-integer (number size stream &key (byte-order :little-endian) signed)
+(defun write-integer (number size stream &key (byte-order :little-endian)
+					   (signed-representation :twos-complement)
+					   signed)
   (when signed
-    (setf number (signed->unsigned number size)))
+    (setf number (signed->unsigned number size signed-representation)))
   (cond ((integerp size)
 	 (write-bytes (ecase byte-order
 			((:big-endian) (encode-msb number size))
