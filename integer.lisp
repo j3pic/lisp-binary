@@ -153,7 +153,40 @@ to that function should match the one given to this function."))
 			    number (1+ whole-bytes))))
 	     (write-bytes too-big stream size)))))
 
-(defun read-integer (length stream &key (byte-order :little-endian) signed)
+(defmacro tlabels (labels &body body)
+  `(labels ,(loop for (name args . bod) in labels
+	       for gs = (gensym)
+	       collect `(,name ,args
+			       (let ((,gs (progn ,@bod)))
+				 (format t "~s returned ~s~%"
+					 (list ',name ,@args)
+					 ,gs)
+				 ,gs)))
+     ,@body))
+
+(defmacro tif (expr if-t if-nil)
+  (let ((expr* (gensym))
+	(res (gensym)))
+    `(let ((,expr* ,expr))
+       (if ,expr*
+	   (let ((,res ,if-t))
+	     (format t "IF condition: ~s~%Test result: TRUE~%Value: ~S~%"
+		     ,expr* ,res)
+	     ,res)
+	   (let ((,res ,if-nil))
+	     (format t "IF condition: ~s~%Test result: FALSE~%Value: ~S~%"
+		     ,expr* ,res)
+	     ,res)))))
+
+(defun ash* (&rest integers)
+  (apply #'ash integers))
+
+(defun logior* (&rest args)
+  (apply #'logior args))
+
+(defun read-integer (length stream &key (byte-order :little-endian)
+				     signed
+				     (signed-representation :twos-complement))
   "Reads an integer of LENGTH bytes from the STREAM in the specified BYTE-ORDER.
 
 If SIGNED is non-NIL, the number is interpreted as being in two's complement format.
@@ -168,12 +201,21 @@ If the STREAM is a BIT-STREAM, then the LENGTH doesn't have to be an integer."
 			  (aref bytes (1- (length bytes)))))
 	  (extra-bits (multiple-value-bind (whole frac) (floor bytes-read)
 			(declare (ignore whole))
-			     (* frac 8))))
+			(* frac 8))))
       (labels ((add-extra-bits (int)
 		 (if partial-byte
 		     (ecase byte-order
 		       (:big-endian
 			(logior
+			 ;; Note: SBCL 1.4.13.debian claims that both
+			 ;; calls to ASH are unreachable, and prints
+			 ;; the message "deleting unreachable code"
+			 ;; for them. Yet, I have confirmed through
+			 ;; extensive tracing that the code is
+			 ;; indeed executed, and removing it changes
+			 ;; the return value of READ-INTEGER in
+			 ;; the relevant case (where BIT-STREAMs are
+			 ;; involved)
 			 (ash int extra-bits)
 			 partial-byte))
 		       (:little-endian
@@ -194,7 +236,7 @@ If the STREAM is a BIT-STREAM, then the LENGTH doesn't have to be an integer."
 			 ((:little-endian) (decode-lsb* bytes))
 			 (otherwise (error "Invalid byte order: ~a" byte-order)))))
 	   (if signed
-	       (unsigned->signed result length)
+	       (unsigned->signed result length :type signed-representation)
 	       result))
 	 bytes-read)))))
 
