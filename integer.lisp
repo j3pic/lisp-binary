@@ -47,24 +47,53 @@
   (reverse (encode-lsb number bytes)))
 (declaim (inline encode-msb))
 
-(defun signed->unsigned/bits (n bits)
+(defun signed->unsigned/bits (n bits type)
   (let ((negative-offset (expt 2 bits)))
     (if (< n 0)
 	(the integer (+ n negative-offset))
 	n)))
 
-(defun signed->unsigned (n bytes)
-  (signed->unsigned/bits n (* 8 bytes)))
+(defun signed->unsigned (n bytes &optional (type :twos-complement))
+  (let ((n (ecase type
+	     (:twos-complement n)
+	     (:ones-complement (ones-complement->twos-complement n)))))
+    (signed->unsigned/bits n (* 8 bytes) type)))
 
-(defun unsigned->signed/bits (n bits)
+(defun twos-complement->ones-complement (n bits)
+  "Given a number that has been decoded as two's complement,
+correct it to what its value should be if the original bits
+were a one's complement representation."
+  (cond ((>= n 0)
+	 n)
+	((= n (1- (expt 2 bits)))
+	 0)
+	(t
+	 (1+ n))))
+
+(defun ones-complement->twos-complement (n)
+  "Given a number that has been decoded as one's complement,
+correct it to what its value should be if the original bits
+were a two's complement representation. This function doesn't
+need the number of bits because all ones in one's complement
+represents 'negative zero', a value that can't be represented
+in Common Lisp integers."
+  (if (>= n 0)
+      n
+      (1- n)))
+	
+
+(defun unsigned->signed/bits (n bits type)
   (let* ((negative-offset (expt 2 bits))
 	 (max (- (/ negative-offset 2) 1)))
     (if (> n max)
 	(- n negative-offset)
 	n)))
 
-(defun unsigned->signed (n bytes)
-  (unsigned->signed/bits n (* 8 bytes)))
+(defun unsigned->signed (n bytes &key (type :twos-complement))
+  (let ((twos-complement (unsigned->signed/bits n (* 8 bytes) type)))
+    (ecase type
+      (:twos-complement twos-complement)
+      (:ones-complement (twos-complement->ones-complement twos-complement (* 8 bytes))))))
 
 (defgeneric write-bytes (buffer stream &optional bytes)
   (:documentation "Write BYTES bytes of the BUFFER into the STREAM. If
