@@ -82,7 +82,7 @@ in Common Lisp integers."
       (1- n)))
 	
 
-(defun unsigned->signed/bits (n bits type)
+(defun unsigned->signed/bits (n bits)
   (let* ((negative-offset (expt 2 bits))
 	 (max (- (/ negative-offset 2) 1)))
     (if (> n max)
@@ -90,7 +90,7 @@ in Common Lisp integers."
 	n)))
 
 (defun unsigned->signed (n bytes &key (type :twos-complement))
-  (let ((twos-complement (unsigned->signed/bits n (* 8 bytes) type)))
+  (let ((twos-complement (unsigned->signed/bits n (* 8 bytes))))
     (ecase type
       (:twos-complement twos-complement)
       (:ones-complement (twos-complement->ones-complement twos-complement (* 8 bytes))))))
