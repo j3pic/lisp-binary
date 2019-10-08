@@ -1611,6 +1611,7 @@ FLOATING-POINT NUMBERS
 		       if (listp f)
 		       append (loop for real-name in f
 				   collect `(export ',real-name))
-			 else collect `(export ',f))))))))
+		       else collect `(export ',f))))
+	',name))))
 
 
