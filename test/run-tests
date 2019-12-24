@@ -14,7 +14,7 @@ sudo apt-get update
 sudo apt-get install wget --yes
 sudo apt-get install clisp --yes
 sudo apt-get install make --yes
-wget -O $HOME/sbcl.tar.bz2 'http://prdownloads.sourceforge.net/sbcl/sbcl-1.4.13-x86-64-linux-binary.tar.bz2'
+wget -O $HOME/sbcl.tar.bz2 'https://astuteinternet.dl.sourceforge.net/project/sbcl/sbcl/1.5.9/sbcl-1.5.9-source.tar.bz2'
 wget -O $HOME/ccl.tar.gz 'https://github.com/Clozure/ccl/releases/download/v1.11/ccl-1.11-linuxx86.tar.gz'
 )
 
