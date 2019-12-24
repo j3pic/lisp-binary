@@ -24,7 +24,7 @@ wget -O $HOME/ccl.tar.gz 'https://github.com/Clozure/ccl/releases/download/v1.11
  cd 
  tar -xzf ccl.tar.gz
  tar -xjf sbcl.tar.bz2
- cd sbcl-1.4.13-x86-64-linux
+ cd sbcl-1.5.9-x86-64-linux
  sudo ./install.sh
 )
 
