@@ -617,7 +617,7 @@ that would normally be bound must be added with a LET form."
 			(offset 0 :type integer)
 			(type nil :type symbol)
 			(base-pointer :beginning :type keyword)
-			(stream *standard-input* :type keyword)))
+			(stream *standard-input* :type stream)))
 
 (defstruct out-pointer
   (offset-position 0 :type number)
