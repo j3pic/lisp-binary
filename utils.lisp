@@ -32,12 +32,17 @@
        collect (pop list) into taken
        finally (return (values taken list))))
 
-
   (defun recursive-find/collect (pred tree)
-    (loop for item in tree
-       when (funcall pred item) collect item
-       else if (listp item) append (recursive-find/collect pred item))))
+    (loop for (first . rest) on tree
+       if (funcall pred first) collect first into result
+       else if (listp first) append (recursive-find/collect pred first) into result
+       unless (listp rest)
+       return (if (funcall pred rest)
+		  (append result (list rest))
+		  result)
+       finally (return result))))
 
+  
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defmacro destructuring-case (expression &rest cases)
     "Matches the EXPRESSION against one of the CASES. Each CASE is of
