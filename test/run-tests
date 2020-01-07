@@ -15,7 +15,7 @@ popd
     sudo apt-get install wget --yes
     sudo apt-get install clisp --yes
     sudo apt-get install make --yes
-    wget -O $HOME/sbcl.tar.bz2 'https://astuteinternet.dl.sourceforge.net/project/sbcl/sbcl/1.5.9/sbcl-1.5.9-source.tar.bz2'
+    wget -O $HOME/sbcl.tar.bz2 'https://astuteinternet.dl.sourceforge.net/project/sbcl/sbcl/2.0.0/sbcl-2.0.0-source.tar.bz2'
     wget -O $HOME/ccl.tar.gz 'https://github.com/Clozure/ccl/releases/download/v1.11/ccl-1.11-linuxx86.tar.gz'
 )
 
@@ -25,7 +25,7 @@ popd
  cd 
  tar -xzf ccl.tar.gz
  tar -xjf sbcl.tar.bz2
- cd sbcl-1.5.9
+ cd sbcl-2.0.0
  ./make.sh
  sudo ./install.sh
  sudo apt-get remove sbcl
