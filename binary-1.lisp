@@ -961,3 +961,53 @@ returns the number of bytes that were written.
 
 (defvar *type-info-objects* nil)
 
+(defparameter *type-expanders* nil)
+(defmacro define-lisp-binary-type (type-info-var lambda-list &body body)
+  "Defines a LISP-BINARY type. The TYPE-INFO-VAR will be bound to a DEFBINARY-TYPE
+object that describes the field. The LAMBDA-LIST will be structurally matched against
+the :TYPE parameter specified in the DEFBINARY form. The BODY may begin with the keyword
+:WHERE followed by a form. If present, this form acts as a further condition for considering
+the LAMBDA-LIST to match the :TYPE parameter.
+
+The BODY is expected to return 3 values:
+
+1. The Lisp type that should be used to represent the instance of this LISP-BINARY type described
+   by the LAMBDA-LIST. 
+2. A form that reads an instance of the data described by the LAMBDA-LIST from a stream whose name
+   will be bound to STREAM-SYMBOL.
+3. A form that writes an instance of the data from a variable whose name will be bound to NAME, into
+   a stream whose name is bound to STREAM-SYMBOL.
+
+The slots of the DEFBINARY-TYPE object provide extra information, and will be bound in the BODY using
+WITH-SLOTS. These slots are described below:
+
+   NAME       - The name of the variable to be defined. The WRITER-FORM will be evaluated in a context
+                where the NAME is bound to the object being written.
+   TYPE       - The type specifier. It's the same value that will have been matched against the LAMBDA-LIST.
+
+   BYTE-ORDER - :LITTLE-ENDIAN or :BIG-ENDIAN.
+   TERMINATOR - A SIMPLE-ARRAY that will be matched against the input to determine the end of a string.
+                If the TYPE is itself a SIMPLE-ARRAY, TERMINATOR can be a function, which will be passed
+                each element read. (TODO: Actually implement that function part)
+   READER     - A user-specified function that overrides the reader that this function would otherwise
+                generate.
+   WRITER     - A user-specified writer function that overrides the default writer.
+   STREAM-SYMBOL - The name that will be given to the input and output stream.
+
+   PREVIOUS-DEFS-SYMBOL - A symbol that will be bound to a list of LET bindings at runtime. In the event of
+                          an EVAL type, code is generated that will splice the LET bindings found here
+                          into a runtime-constructed LET form that will then be EVAL'd.
+   BYTE-COUNT-NAME      - The name of the variable that will be bound to the number of bytes read or written so far.
+   ALIGN                - The alignment boundary
+   ELEMENT-ALIGN        - The alignment boundary for individual elements in an array.
+   BIND-INDEX-TO        - In array reads and writes, may specify a variable to bind the loop index to.
+                          Or it can be NIL.
+ 
+"
+  (let ((args (gensym)))
+    `(push (lambda (,type-info-var &rest ,args)
+	     (declare (ignorable ,type-info-var))
+	     (bind-class-slots defbinary-type ,type-info-var
+	       (apply 
+		(destructuring-lambda ,lambda-list ,@body) ,args)))
+	   *type-expanders*)))

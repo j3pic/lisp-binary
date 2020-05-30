@@ -2,7 +2,8 @@
   (:use :common-lisp :moptilities)
   (:shadowing-import-from :closer-mop)
   (:export :subst* :struct-like-defclass :bind-class-slots :remove-plist-keys :recursive-find
-	   :recursive-map :assoc-cdr :aif :awhen :it :destructuring-case :recursive-find/collect :plist-replace
+	   :recursive-map :assoc-cdr :aif :awhen :it :destructuring-case :destructuring-lambda
+	   :no-destructuring-match :recursive-find/collect :plist-replace
 	   :recursive-find-if :recursive-mapcar :letf :relative-file-position :group :let-values* :let-values :divisiblep
 	   :named-let :pushover :insert-before :has-sublist-p :find-sublist :recursive-find-sublist :remove-binding :mapseq
 	   :with-file-position :simple-define-condition))
@@ -18,6 +19,8 @@
                         collect (if (listp slot-name)
                                     slot-name
                                     `(,slot-name :initarg ,(intern (symbol-name slot-name) :keyword))))))
+
+(define-condition no-destructuring-match (warning) ())
 
 (defmacro named-let (name defs &body body)
   (let ((vars (mapcar #'first defs))
@@ -117,7 +120,13 @@ after it.
 	 do (setf result-form case-implementation))
       `(let ((,var ,expression))
 	 (block ,block-name
-	    ,result-form)))))
+	   ,result-form))))
+  (defmacro destructuring-lambda (lambda-list &body body)
+    (let ((args (gensym)))
+      `(lambda (&rest ,args)
+	 (destructuring-case ,args
+	   (,lambda-list ,@body)
+	   (otherwise (warn 'no-destructuring-match)))))))
 
 (defun group (list &key (test #'eql) (key #'identity))
   (let ((groups nil)
@@ -209,11 +218,13 @@ to list the slots of a certain struct."
   "Evaluates BODY with the slots from the CLASS bound to the values taken from
 INSTANCE. The CLASS must be a class object at compile-time, so the macro can
 extract the needed variable names for binding."
-  (let ((instance-value (gensym)))
+  (let ((instance-value (gensym))
+	(slot-names (slot-names (eval class))))
     `(let ((,instance-value ,instance))
        (declare (ignorable ,instance-value))
-       (let ,(loop for name in (slot-names (eval class)) collect
+       (let ,(loop for name in slot-names collect
 		  `(,name (slot-value ,instance ',name)))
+	 (declare (ignorable ,@slot-names))
        ,@body))))
 
 (defun remove-plist-keys (plist &rest keys)
