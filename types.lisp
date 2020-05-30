@@ -128,86 +128,88 @@
 
 (define-lisp-binary-type type-info (type &key pointer-type data-type base-pointer-name region-tag validator)
   :where (eq type 'pointer)
-  (letf (((slot-value type-info 'type) pointer-type))
-    (multiple-value-bind (pointer-defstruct-type pointer-reader pointer-writer)
-	(expand-defbinary-type-field type-info)
-      (declare (ignore pointer-defstruct-type)
-	       (optimize (speed 0) (debug 3)))
-      (letf (((slot-value type-info 'type) data-type))
-	(multiple-value-bind (defstruct-type data-reader data-writer)
-	    (expand-defbinary-type-field type-info)
-	  (values (getf defstruct-type :type)
-		  (alexandria:with-gensyms (pointer-value base-pointer-address pointer-bytes-read
-							  pbr2 pv2)
-		    `(let* ((,pointer-bytes-read nil)
-			    (,base-pointer-address ,(if base-pointer-name
-							`(get-base-pointer-tag ',base-pointer-name)
-							0))
-			    (,pointer-value (+ ,base-pointer-address
-					       (multiple-value-bind (,pv2 ,pbr2)
-						   ,pointer-reader
-						 (setf ,pointer-bytes-read ,pbr2)
-						 ,pv2))))
-		       (restart-case
-			   (progn
-			     ,@(if validator
-				   `((funcall ,validator ,pointer-value)))
-			     (with-file-position (,pointer-value ,stream-symbol)
-			       (values ,data-reader ,pointer-bytes-read)))
-			 (use-value (value)
-			   :report ,(format nil "Provide a value of type ~S" data-type)
-			   :interactive (lambda ()
-					  (format t "Enter a value of type ~S: " ',data-type)
-					  (force-output)
-					  (list (eval (read))))
-			   (values value 0)))))
-		  (alexandria:with-gensyms (closure)
-		    `(let ((,closure (lambda (,name ,stream-symbol)
-				       ,data-writer)))
-		       (queue-write-pointer ',region-tag (file-position ,stream-symbol)
-					    ;; Trying to figure out the size, byte order, and
-					    ;; signedness of the pointer by analyzing the code
-					    ;; that was generated to write it.
-					    ,@(destructuring-case (recursive-find-sublist '(write-integer) pointer-writer)
-						((write-integer number size stream &key (byte-order :little-endian)
-								(signed-representation :twos-complement)
-								signed)
-						 (declare (ignore write-integer number stream signed-representation))
-						 (list size byte-order signed))
-						(otherwise
-						 (restart-case
-						     (error "Can't determine the format of a pointer of type ~a" pointer-type)
-						   (use-type (new-pointer-type)
-						     :report "Enter a different pointer type to use"
-						     :interactive (lambda ()
-								    (format t "Enter the new type: ")
-								    (list (read)))
-						     (letf (((slot-value type-info 'type)
-							     `(pointer :pointer-type ,new-pointer-type
-								       :data-type ,data-type
-								       :base-pointer-name ,base-pointer-name
-								       :region-tag ,region-tag)))
-						       (return-from expand-defbinary-type-field
-							 (expand-defbinary-type-field type-info))))
-						   (enter-parameters (size byte-order signedness)
-						     :report "Enter the pointer parameters manually"
-						     :interactive (lambda ()
-								    (list (progn
-									    (format t "Enter the size in bytes of the pointer: ")
-									    (eval (read)))
-									  (progn
-									    (format t "Enter the byte order of the pointer (:LITTLE-ENDIAN or :BIG-ENDIAN): ")
-									    (eval (read)))
-									  (progn
-									    (format t "Is it signed? (Y/n): ")
-									    (if (find #\n (read-line)
-										      :test #'equalp)
-										nil
-										t))))
-						     (list size byte-order signedness)))))
-					    ,name ,closure)
-		       (let ((,name 0))
-			 ,pointer-writer))))
+  (block nil
+    (letf (((slot-value type-info 'type) pointer-type))
+      (multiple-value-bind (pointer-defstruct-type pointer-reader pointer-writer)
+	  (expand-defbinary-type-field type-info)
+	(declare (ignore pointer-defstruct-type)
+		 (optimize (speed 0) (debug 3)))
+	(letf (((slot-value type-info 'type) data-type))
+	  (multiple-value-bind (defstruct-type data-reader data-writer)
+	      (expand-defbinary-type-field type-info)
+	    (values (getf defstruct-type :type)
+		    (alexandria:with-gensyms (pointer-value base-pointer-address pointer-bytes-read
+							    pbr2 pv2)
+		      `(let* ((,pointer-bytes-read nil)
+			      (,base-pointer-address ,(if base-pointer-name
+							  `(get-base-pointer-tag ',base-pointer-name)
+							  0))
+			      (,pointer-value (+ ,base-pointer-address
+						 (multiple-value-bind (,pv2 ,pbr2)
+						     ,pointer-reader
+						   (setf ,pointer-bytes-read ,pbr2)
+						   ,pv2))))
+			 (restart-case
+			     (progn
+			       ,@(if validator
+				     `((funcall ,validator ,pointer-value)))
+			       (with-file-position (,pointer-value ,stream-symbol)
+				 (values ,data-reader ,pointer-bytes-read)))
+			   (use-value (value)
+			     :report ,(format nil "Provide a value of type ~S" data-type)
+			     :interactive (lambda ()
+					    (format t "Enter a value of type ~S: " ',data-type)
+					    (force-output)
+					    (list (eval (read))))
+			     (values value 0)))))
+		    (alexandria:with-gensyms (closure)
+		      `(let ((,closure (lambda (,name ,stream-symbol)
+					 ,data-writer)))
+			 (queue-write-pointer ',region-tag (file-position ,stream-symbol)
+					      ;; Trying to figure out the size, byte order, and
+					      ;; signedness of the pointer by analyzing the code
+					      ;; that was generated to write it.
+					      ,@(destructuring-case (recursive-find-sublist '(write-integer) pointer-writer)
+						  ((write-integer number size stream &key (byte-order :little-endian)
+								  (signed-representation :twos-complement)
+								  signed)
+						   (declare (ignore write-integer number stream signed-representation))
+						   (list size byte-order signed))
+						  (otherwise
+						   (restart-case
+						       (error "Can't determine the format of a pointer of type ~a" pointer-type)
+						     (use-type (new-pointer-type)
+						       :report "Enter a different pointer type to use"
+						       :interactive (lambda ()
+								      (format t "Enter the new type: ")
+								      (list (read)))
+						       (letf (((slot-value type-info 'type)
+							       `(pointer :pointer-type ,new-pointer-type
+									 :data-type ,data-type
+									 :base-pointer-name ,base-pointer-name
+									 :region-tag ,region-tag)))
+							 (multiple-value-bind (defstruct-form reader writer)
+							     (expand-defbinary-type-field type-info)
+							   (return (values (getf defstruct-form :type) reader writer)))))
+						     (enter-parameters (size byte-order signedness)
+						       :report "Enter the pointer parameters manually"
+						       :interactive (lambda ()
+								      (list (progn
+									      (format t "Enter the size in bytes of the pointer: ")
+									      (eval (read)))
+									    (progn
+									      (format t "Enter the byte order of the pointer (:LITTLE-ENDIAN or :BIG-ENDIAN): ")
+									      (eval (read)))
+									    (progn
+									      (format t "Is it signed? (Y/n): ")
+									      (if (find #\n (read-line)
+											:test #'equalp)
+										  nil
+										  t))))
+						       (list size byte-order signedness)))))
+					      ,name ,closure)
+			 (let ((,name 0))
+			   ,pointer-writer))))))))))
 
 (define-lisp-binary-type type-info (type &key (actual-type '(unsigned-byte 16)) (value 0))
   :where (eq type 'magic)
