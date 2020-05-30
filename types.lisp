@@ -241,10 +241,10 @@
 		  (continue ()
 		    :report "Ignore the error and continue loading"
 		    nil)))
-	      (values ,v ,bytes-read)))))
+	      (values ,v ,bytes-read))))
       `(progn
 	 (setf ,name ,value)
-	 ,writer))))
+	 ,writer)))))
 
 (define-lisp-binary-type type-info (type length &key (external-format :latin1) (padding-character #\Nul))
   :where (member type '(fixed-length-string fixed-string))
