@@ -1,5 +1,14 @@
 (in-package :lisp-binary)
 
+(define-lisp-binary-type type-info (type)
+  (if (gethash type *enum-definitions*)
+      (values 'symbol
+	      `(read-enum ',type ,stream-symbol)
+	      `(write-enum ',type ,name ,stream-symbol))
+      (values type
+	      `(read-binary ',type ,stream-symbol)
+	      `(write-binary ,name ,stream-symbol))))
+
 (define-lisp-binary-type type-info (type &key reader writer (lisp-type t))
   :where (eq type 'custom)
   (values lisp-type
@@ -538,11 +547,3 @@
       (expand-defbinary-type-field type-info)
     (values (getf defstruct-type :type) reader writer)))
 
-(define-lisp-binary-type type-info (type)
-  (if (gethash type *enum-definitions*)
-      (values 'symbol
-	      `(read-enum ',type ,stream-symbol)
-	      `(write-enum ',type ,name ,stream-symbol))
-      (values type
-	      `(read-binary ',type ,stream-symbol)
-	      `(write-binary ,name ,stream-symbol))))
