@@ -29,7 +29,9 @@
 				     `(funcall ,it ,(slot-value type-info 'stream-symbol))
 				     reader)
 				(aif (slot-value type-info 'writer)
-				     `(funcall ,it ,(slot-value type-info 'stream-symbol))
+				     `(funcall ,it
+					       ,(slot-value type-info 'name)
+					       ,(slot-value type-info 'stream-symbol))
 				     writer))))
 	    (continue () nil)))
        finally (error "Unknown LISP-BINARY type: ~s" (slot-value type-info 'type))))
