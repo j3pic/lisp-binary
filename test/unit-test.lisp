@@ -31,7 +31,7 @@
 				    (declare (ignorable exn))
 				    (aif (find-restart 'fail-test)
 					 (invoke-restart it)))))
-		    (eval (cons 'progn ',body)))))
+		    (eval (list* 'let nil ',body)))))
 	  t))
 
 (defun do-tests ()

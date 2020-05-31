@@ -32,7 +32,7 @@
        (read-binary-type `(simple-array (unsigned-byte 8) (,(file-length in))) in))))
 
 (defun expand-defbinary-field (default-value &rest keys)
-  (apply #'lisp-binary::expand-defbinary-field (list* 'test-struct '*field* default-value
+  (apply #'lisp-binary::expand-defbinary-field (list* '*field* default-value
 						      :stream-symbol '*stream*
 						      :previous-defs-symbol '*previous-defs*
 						      :byte-count-name '*byte-count*
