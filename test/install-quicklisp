@@ -4,7 +4,7 @@ LISP="$1"
 
 set -x -e -o pipefail
 
-wget https://beta.quicklisp.org/quicklisp.lisp
+wget --no-check-certificate https://beta.quicklisp.org/quicklisp.lisp
 
 echo " Running SBCL version: " `sbcl --version`
 
