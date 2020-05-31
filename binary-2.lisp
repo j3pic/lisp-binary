@@ -52,7 +52,7 @@ the NAME is bound to the slot's value."
   (declare (optimize (safety 3) (debug 3) (speed 0)))
   (assert byte-count-name)
   (setf other-keys (remove-plist-keys other-keys :type :byte-order :encoding :terminator :reader :writer :stream-symbol :previous-defs-symbol
-				                 :byte-count-name :align :element-align :bind-index-to))
+				      :byte-count-name :align :element-align :bind-index-to))
   (multiple-value-bind (real-type read-form write-form)
       (expand-defbinary-type-field
        (make-instance 'defbinary-type 

@@ -801,17 +801,16 @@ bindings of all the relevant special variables."
        ,read/write-form)))
 
 (defmacro read/write-binary-type (read-or-write type stream &key value (byte-order :little-endian) align element-align)
-  `(alexandria:with-gensyms (stream-name struct-name field-name)
+  `(alexandria:with-gensyms (stream-name field-name)
      (multiple-value-bind (defstruct-type runtime-reader runtime-writer)
-       (expand-defbinary-type-field struct-name
-			       (make-instance 'defbinary-type
-					      :name field-name
-					      :type ,type
-					      :byte-order ,byte-order
-					      :stream-symbol stream-name
-					      :previous-defs-symbol nil
-					      :align ,align
-					      :element-align ,element-align))
+       (expand-defbinary-type-field (make-instance 'defbinary-type
+						   :name field-name
+						   :type ,type
+						   :byte-order ,byte-order
+						   :stream-symbol stream-name
+						   :previous-defs-symbol nil
+						   :align ,align
+						   :element-align ,element-align))
        (declare (ignore defstruct-type ,(ecase read-or-write
 				(:read 'runtime-writer)
 				(:write 'runtime-reader))))
