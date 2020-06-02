@@ -414,7 +414,85 @@ STREAM-NAMES."
 				 (preserve-*byte-order* t)
 				 align
                                  export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
-  "Defines a struct that represents binary data, and also generates readers and writers.
+  "Defines a struct that represents binary data. Also generates two methods for this struct, named
+READ-BINARY and WRITE-BINARY, which (de)serialize the struct to or from a stream. The serialization is
+a direct binary representation of the fields of the struct. For instance, if there's a field with a :TYPE of
+(UNSIGNED-BYTE 32), 4 bytes will be written in the specified :BYTE-ORDER. The fields are written (or read) in
+the order in which they are specified in the body of the DEFBINARY form.
+
+ARGUMENTS
+
+  NAME - Used as the name in the generated DEFSTRUCT form.
+
+  :BYTE-ORDER - The byte-order to use when reading or writing multi-byte
+                data. Accepted values are :BIG-ENDIAN, :LITTLE-ENDIAN,
+                and :DYNAMIC. If :DYNAMIC is specified, then the
+                READ- and WRITE-BINARY methods will consult the special
+                variable LISP-BINARY:*BYTE-ORDER* at runtime to decide
+                which byte order to use. That variable is expected to
+                be either :LITTLE-ENDIAN or :BIG-ENDIAN.
+  
+  :PRESERVE-*BYTE-ORDER* - Don't revert changes that get made to
+                           LISP-BINARY:*BYTE-ORDER* during the call
+                           to either READ- or WRITE-BINARY.
+
+  :ALIGN - Align to the specified byte boundary before reading or writing
+           the struct.
+  
+  :EXPORT - Export all symbols associated with the generated struct,
+            including the name of the struct, the name of the constructor,
+            and all the slot names.
+
+  :BYTE-COUNT-NAME - In all value and type forms, bind to this name
+                     the number of bytes in the struct written so far.
+
+&ALLOW-OTHER-KEYS - All other keyword arguments will be passed through
+                    to the generated CL:DEFSTRUCT form as part of the
+                    NAME-AND-OPTIONS argument.
+
+FIELD-DESCRIPTIONS - A list of slot specifications, having the following structure:
+
+   (FIELD-NAME DEFAULT-VALUE &KEY TYPE BYTE-ORDER ALIGN ELEMENT-ALIGN
+                                  READER WRITER BIND-INDEX-TO)
+
+   The parameters have the following meanings:
+   
+   FIELD-NAME    - The name of the slot.
+   
+   DEFAULT-VALUE - The default value.
+   
+   TYPE          - The type of the field. Some Common Lisp types such as
+                   (UNSIGNED-BYTE 32) are supported. Any type defined
+                   with DEFBINARY is also supported. For more info, see
+                  'TYPES' below.
+   
+   BYTE-ORDER    - The byte order to use when reading or writing this
+                   field. Defaults to the BYTE-ORDER given for the whole
+                   struct.
+   
+   ALIGN         - If specified, reads and writes will be aligned on this
+                   boundary. When reading, bytes will be thrown away until 
+                   alignment is achieved. When writing, NUL bytes will be
+                   written.
+   
+   ELEMENT-ALIGN - If the TYPE is an array, each element of the array will
+                   be aligned to this boundary.
+   
+   READER        - If speficied, this function will be used to read the field.
+                   It must accept one argument (a stream), and return two
+                   values - The object read, and the the number of bytes read.
+                   The number of bytes read is used for alignment purposes.
+   
+   WRITER        - If specified, this function will be used to write the field.
+                   It must accept two arguments (the object to write, and the
+                   stream), and return the number of bytes written, which is
+                   used for alignment purposes.
+   
+   BIND-INDEX-TO - If the EVAL type specifier is used as an array's element type
+                   (see below), BIND-INDEX-TO will be bound to the current index
+                   into the array, in case that matters for determining the type
+                   of the next element.
+
 
 Example:
 
@@ -461,13 +539,6 @@ The WRITE-BINARY method is called like this:
 
     (write-binary object stream)
 
-:BYTE-ORDER is either :little-endian or :big-endian to control the byte order that will
-be used when reading, writing, or sending over a network. It is defined on a struct-wide
-basis, and can be overridden on a per-slot basis.
-
-:EXPORT determines whether the struct name, slot names, and generators will be exported
-from the current package.
-
 TYPES
 
     DEFBINARY supports two kinds of types: Ordinary Common Lisp types, and Virtual Types.
@@ -491,7 +562,7 @@ TYPES
         float, short-float, half-float, single-float, double-float, quadruple-float,
         and octuple-float.
 
-           FLOAT SINGLE-FLOAT are treated as IEEE Single Precision,
+           FLOAT and SINGLE-FLOAT are treated as IEEE Single Precision,
            DOUBLE-FLOAT is treated as IEEE Double Precision, while the others are read
            in as IEEE Half Precision, Quadruple Precision, etc.
 
