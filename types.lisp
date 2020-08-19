@@ -310,7 +310,7 @@
 	  (expand-defbinary-type-field type-info)
 	(setf writer `(let ((,count-size* ,count-size))
 			(+
-			 (write-integer (length ,name) ,count-size* ,stream-symbol)
+			 (write-integer (length ,name) ,count-size* ,stream-symbol :byte-order ,byte-order)
 			 ,writer)))
 	(setf reader `(let ((,count-size* ,count-size))
 			(multiple-value-bind (,reader-value ,reader-byte-count) ,reader
