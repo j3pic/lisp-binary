@@ -87,3 +87,26 @@
       
       
 				   
+(define-enum boolean-byte 1 ()
+  (nil 0)
+  (t 1)
+  (:file-not-found 2))
+
+(unit-test 'enum-test
+    (loop for (value symbol)
+       in '((0 nil)
+	    (1 t)
+	    (2 :file-not-found))
+	 do
+	 (let ((buffer (flexi-streams:with-output-to-sequence (out)
+			 (write-integer value 1 out :byte-order :little-endian))))
+	   (assert= (flexi-streams:with-input-from-sequence (in buffer)
+		      (read-binary-type 'boolean-byte in))
+		    symbol)
+	   (assert-equalp (flexi-streams:with-output-to-sequence (out)
+			    (write-binary-type symbol 'boolean-byte out))
+			  buffer))))
+			
+	   
+	 
+  
