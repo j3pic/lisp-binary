@@ -200,9 +200,11 @@ to a list of variables, and will expand to a nested MULTIPLE-VALUE-BIND expressi
       (cons nil def)
       def))
 
-(defun assoc-cdr (item assoc-list &key (test #'eql))
+(defun assoc-cdr (item assoc-list &key (test #'eql) call-if-not-found)
   (loop for (car . cdr) in assoc-list
-       if (funcall test item cdr) return (cons car cdr)))
+     if (funcall test item cdr) return (cons car cdr)
+     finally (when call-if-not-found
+	       (return (funcall call-if-not-found item assoc-list)))))
 
 (defmacro struct-like-defclass (name superclasses &rest slot-defs)
   "An extremely simplified version of DEFCLASS. Written because I needed to be able

@@ -189,7 +189,14 @@ Example:
   (let ((definition (if (enum-definition-p enum)
 			enum
 			(gethash enum *enum-definitions*))))
-    (car (assoc-cdr value (slot-value definition 'variables)))))
+    (car (assoc-cdr value (slot-value definition 'variables)
+		    :call-if-not-found (lambda (item alist)
+					 (error 'bad-enum-value
+						:integer-value value
+						:symbol-value nil
+						:enum-name (slot-value enum 'name)
+						:format-control "Value ~a is not a value in enum ~a"
+						:format-arguments (list value (slot-value enum 'name))))))))
 
 (defparameter *byte-order* :little-endian)
 
@@ -218,13 +225,7 @@ Example:
 					byte-order))
 		      :signed (slot-value enum-def 'signed))
       (values
-       (or (get-enum-name enum-def raw-value)
-	   (error 'bad-enum-value
-		  :integer-value raw-value
-		  :symbol-value nil
-		  :enum-name (slot-value enum-def 'name)
-		  :format-control "Value ~a is not a value in enum ~a"
-		  :format-arguments (list raw-value (slot-value enum-def 'name))))
+       (get-enum-name enum-def raw-value)
        bytes-read))))
 
 (defun decode-ip-addr (raw-msb)
