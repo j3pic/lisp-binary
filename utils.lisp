@@ -291,10 +291,7 @@ returns NIL"
 			      (funcall pred node)))))
 
 (defun mapseq (function sequence)
-  (if (listp sequence)
-      (mapcar function sequence)
-      (make-array (list (length sequence))
-		  :initial-contents (mapcar function sequence))))
+  (map (type-of sequence) function sequence))
 
 (defun recursive-find-sublist (sublist tree)
   (recursive-find-if
