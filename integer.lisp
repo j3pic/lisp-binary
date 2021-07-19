@@ -132,8 +132,12 @@ NOTE: If you're using this with a bit-stream created with WRAP-IN-BIT-STREAM, th
 to that function should match the one given to this function."))
 
 (defmethod read-bytes (n stream &key (element-type '(unsigned-byte 8)))
-  (let ((result (make-array n :element-type element-type)))
-    (values result (read-sequence result stream))))
+  (let* ((result (make-array n :element-type element-type))
+	 (bytes-read (read-sequence result stream)))
+    (when (< bytes-read n)
+      (cerror "Ignore the error and proceed as if the remaining bytes were zeroes"
+	      (make-condition 'end-of-file :stream stream)))
+    (values result bytes-read)))
 
 (defun write-integer (number size stream &key (byte-order :little-endian)
 					   (signed-representation :twos-complement)

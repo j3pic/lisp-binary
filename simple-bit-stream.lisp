@@ -232,7 +232,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 
 (defmacro read-bytes-with-partial/macro (stream* bits byte-order &key adjustable)
   (alexandria:with-gensyms (whole-bytes remaining-bits element-bits buffer
-					stream)
+					stream bytes-read)
     `(let* ((,stream ,stream*)
 	    (,element-bits (slot-value ,stream 'element-bits)))
        (multiple-value-bind (,whole-bytes ,remaining-bits)
@@ -242,12 +242,14 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 				    :adjustable ,adjustable
 				    :fill-pointer ,adjustable)))
 	   (when (> ,whole-bytes 0)
-	     (read-sequence ,buffer ,stream))
+	     (let ((,bytes-read (read-sequence ,buffer ,stream)))
+	       (when (< ,bytes-read ,whole-bytes)
+		   (cerror "Ignore the error." (make-condition 'end-of-file ,stream)))))
 	   (values ,buffer ,(ecase byte-order
-				   (:little-endian
-				    `(read-partial-byte/little-endian ,remaining-bits ,stream))
-				   (:big-endian
-				    `(read-partial-byte/big-endian ,remaining-bits, stream)))
+			      (:little-endian
+			       `(read-partial-byte/little-endian ,remaining-bits ,stream))
+			      (:big-endian
+			       `(read-partial-byte/big-endian ,remaining-bits, stream)))
 		   ,remaining-bits))))))
 
 (defun read-bytes-with-partial (stream bits)
