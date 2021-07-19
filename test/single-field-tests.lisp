@@ -84,6 +84,25 @@
 			    (write-binary-type value `(signed-byte 8 :signed-representation ,complement)
 					       out :byte-order :big-endian))
 			  buffer))))
-      
-      
-				   
+      		   
+(unit-test 'short-input-test
+    (loop for wrapper in (list 'simple-bit-stream:wrap-in-bit-stream 'identity)
+	 do
+	 (handler-case 
+	     (flexi-streams:with-input-from-sequence (in #(1 1))
+	       (read-binary-type '(unsigned-byte 32) in)
+	       (error "Failed to short input test with wrapper ~a." wrapper))
+	   (end-of-file ()
+	     :pass))))
+
+(unit-test 'short-bit-input-test
+    (flexi-streams:with-input-from-sequence (in #(255))
+      (with-wrapped-in-bit-stream (in-bitstream in)
+	(read-bytes 1/2 in-bitstream)
+	(handler-case
+	    (progn
+	      (read-bytes 1 in-bitstream)
+	      (error "Failed short-bit-input test."))
+	  (end-of-file ()
+	    :pass)))))
+	 

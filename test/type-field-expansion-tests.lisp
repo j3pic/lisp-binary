@@ -13,14 +13,8 @@
     (eval (slot-value binary-field-object (intern (symbol-name which-form) :lisp-binary)))))
 
 (defmacro with-read-stream (contents &body body)
-  `(progn
-     (with-open-binary-file (out "/tmp/foobar.bin"
-				 :direction :output
-				 :if-exists :supersede)
-       (write-sequence ,contents out))
-     (with-open-binary-file (*stream* "/tmp/foobar.bin"
-				      :direction :input)
-       ,@body)))
+  `(flexi-streams:with-input-from-sequence (*stream* ,contents)
+     ,@body))
 
 (defmacro with-write-stream-to-buffer (&body body)
   `(progn
