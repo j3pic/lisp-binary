@@ -453,14 +453,76 @@
 		    reader* writer*)))))))
 
 (define-lisp-binary-type type-info (type-name type-generating-form)
-    :where (eq type-name 'eval)
-    (values
-     t
-     `(read-binary-type ,type-generating-form ,stream-symbol :byte-order ,byte-order
-			:align ,align :element-align ,element-align)
-     `(write-binary-type ,name ,type-generating-form ,stream-symbol
-			 :byte-order ,byte-order :align ,align
-			 :element-align ,element-align)))
+  :where (eq type-name 'eval)
+  (let ((case-template nil)
+	(readers nil)
+	(writers nil))
+    ;; The following implements an optimization for a common case:
+    ;; If the EVAL expression is a CASE, ECASE, TYPECASE, or ETYPECASE,
+    ;; it may be possible to replace the types that these forms return
+    ;; with the reader/writer code that each type would expand to. For
+    ;; example, if you specify this type:
+    ;;
+    ;; (eval (case foo
+    ;;         (1 'counted-string)
+    ;;         (2 '(unsigned-byte 16))))
+    ;;
+    ;; ...without the optimization, it would expand to:
+    ;;
+    ;; Reader: (read-binary-type (case foo ...))
+    ;; Writer: (write-binary-type (case foo ...))
+    ;;
+    ;; ...and then at runtime, READ-BINARY-TYPE/WRITE-BINARY-TYPE will
+    ;;    create a reader or writer form from the type and EVAL it.
+    ;;
+    ;; But with the optimization, the CASE form expands to:
+    ;;
+    ;; Reader: (case foo
+    ;;            (1 (read-binary 'counted-string #:stream-symbol))
+    ;;            (2 (read-integer 2 #:stream-symbol :byte-order :little-endian
+    ;;                    :signed nil :signed-representation :twos-complement)))
+    ;; Writer: (case foo
+    ;;            (1 (write-binary bar #:stream-symbol))
+    ;;            (2 (write-integer bar 2 #:stream-symbol :byte-order ...)))
+    ;;
+    ;; ...which skips the runtime EVAL and is therefore more efficient.
+    
+    (setf case-template
+	  (block make-case-template
+	    (if (member (car type-generating-form) '(case ecase typecase etypecase))
+		`(,(first type-generating-form)
+		   ,(second type-generating-form)
+		   ,@(loop for (case . body) in (cddr type-generating-form)
+			collect (handler-case
+				    (letf (((slot-value type-info 'type)
+					    (eval `(progn ,@body))))
+				      (multiple-value-bind (type reader writer)
+					  (expand-defbinary-type-field type-info)
+					(let ((placeholder (gensym)))
+					  (push (cons placeholder reader) readers)
+					  (push (cons placeholder writer) writers)
+					  (list case placeholder))))
+				  (t ()
+				    ;; Most likely error: The form in question has something in
+				    ;; it that would only work with an EVAL at read or write time,
+				    ;; not at compile time. So we just return the unoptimized FORM,
+				    ;; then.
+				    (return-from make-case-template nil))))))))
+    (labels ((fill-template (expansions)
+	       (list* (first case-template)
+		      (second case-template)
+		      (loop for (case placeholder) in (cddr case-template)
+			 collect (list case (cdr (assoc placeholder expansions)))))))
+      (if case-template
+	  (values t (fill-template readers) (fill-template writers))
+	  
+	  (values
+	   t
+	   `(read-binary-type ,type-generating-form ,stream-symbol :byte-order ,byte-order
+			      :align ,align :element-align ,element-align)
+	   `(write-binary-type ,name ,type-generating-form ,stream-symbol
+			       :byte-order ,byte-order :align ,align
+			       :element-align ,element-align))))))
 
 (define-lisp-binary-type type-info (byte-type bits &key (signed-representation :twos-complement))
   :where (member byte-type '(unsigned-byte signed-byte))

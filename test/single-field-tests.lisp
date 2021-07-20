@@ -117,3 +117,23 @@
 	   0)))))
 	
       
+(unit-test 'eval-no-case-test
+    (with-read-stream #(12 12 12 12)
+      (assert-equalp
+       (read-binary-type `(eval '(unsigned-byte 32)) *stream*)
+       #x0c0c0c0c))
+  (assert-equalp
+   (with-write-stream-to-buffer
+     (write-binary-type #x0c0c0c0c `(eval '(unsigned-byte 32)) *stream*))
+   #(12 12 12 12)))
+
+(unit-test 'eval-with-case-test
+    (with-read-stream #(12 12 12 12)
+      (assert-equalp
+       (read-binary-type `(eval (case t (otherwise '(unsigned-byte 32)))) *stream*)
+       #x0c0c0c0c))
+  (assert-equalp
+   (with-write-stream-to-buffer
+     (write-binary-type #x0c0c0c0c `(eval (case t (otherwise '(unsigned-byte 32)))) *stream*))
+   #(12 12 12 12)))
+
