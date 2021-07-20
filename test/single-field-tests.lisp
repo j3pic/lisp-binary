@@ -106,3 +106,14 @@
 	  (end-of-file ()
 	    :pass)))))
 	 
+
+(unit-test 'read-sequence-bit-stream-test
+    (flexi-streams:with-input-from-sequence (in #(155))
+      (with-wrapped-in-bit-stream (in-bitstream in)
+	(read-bytes 1/2 in-bitstream)
+	(let ((seq (make-array 1)))
+	  (assert-equalp
+	   (read-sequence seq in-bitstream)
+	   0)))))
+	
+      

@@ -218,8 +218,13 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	 (read-sequence sequence (slot-value stream 'real-stream) :start start :end end))
 	(t
 	 (loop for ix from start below end
-	    do (setf (elt sequence ix) (read-byte stream))
-	      count t))))
+	    do (setf (elt sequence ix)
+		     (handler-case
+			 (read-byte stream)
+		       (end-of-file ()
+			 (return bytes-read))))
+	    count t into bytes-read
+	    finally (return bytes-read)))))
 
 #-sbcl
 (defmethod #+ccl ccl:stream-read-vector #-ccl stream-read-sequence  ((stream bit-stream) sequence start end
@@ -244,7 +249,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	   (when (> ,whole-bytes 0)
 	     (let ((,bytes-read (read-sequence ,buffer ,stream)))
 	       (when (< ,bytes-read ,whole-bytes)
-		   (cerror "Ignore the error." (make-condition 'end-of-file ,stream)))))
+		   (cerror "Ignore the error." (make-condition 'end-of-file :stream ,stream)))))
 	   (values ,buffer ,(ecase byte-order
 			      (:little-endian
 			       `(read-partial-byte/little-endian ,remaining-bits ,stream))
