@@ -253,6 +253,43 @@
 						     *standard-input*))
 			 :out-direction :io))))
 
+(defbinary array-length-test ()
+  (length 0 :type (unsigned-byte 8))
+  (data nil :type (eval (case length
+			  (0 'null)
+			  (otherwise `(simple-array (unsigned-byte 8) (,length)))))))
+
+(unit-test 'eval-case-runtime-only-test
+    ;; If you use the EVAL type specifier with a CASE
+    ;; form, EVAL optimizes the code so that the reader/
+    ;; writer code is generated at compile time from the
+    ;; type specifiers that the CASE form might evaluate
+    ;; to. So instead of a CASE form that evaluates to
+    ;; different types, you get a CASE form that performs
+    ;; different read/write code.
+    ;;
+    ;; There's one case where this won't work: If any of
+    ;; the original type specifiers incorporate data
+    ;; that is only available at runtime, then they can't
+    ;; be expanded at compile time. In that case, we
+    ;; abort the optimization and just do an EVAL at
+    ;; runtime. This test makes sure that this degradation
+    ;; works. The DATA member here has an EVAL type with a
+    ;; CASE form, that creates a type containing the
+    ;; object's LENGTH value, which is only available
+    ;; at runtime.
+    (let ((empty (make-array-length-test))
+	  (full (make-array-length-test :length 1
+					:data (buffer 1))))
+      (test-round-trip "EVAL optimizer test"
+		       (progn
+			 (write-binary empty *standard-output*)
+			 (write-binary full *standard-output*))
+		       (progn
+			 (assert-equalp empty (read-binary 'array-length-test *standard-input*))
+			 (assert-equalp full (read-binary 'array-length-test *standard-input*))))))
+    
+
 ;; I wrote a program that generated a bunch of warnings. This
 ;; should be enough to reproduce it.
 
