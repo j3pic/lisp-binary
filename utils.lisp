@@ -59,9 +59,9 @@ form.
 Example:
 
    (destructuring-case '(1 2 3)
-      ((a b c) :where (symbolp a)
-       (declare (ignore b c))
-       (list :symbol  a))
+      ((a b _) :where (symbolp a)
+       (declare (type integer b))
+       (list :symbol a (+ b 12)))
       ((a b &optional c) :where (number b)
        (declare (ignore a c)))
        (list :number b))
@@ -91,32 +91,33 @@ after it.
 							   (and (listp form)
 								(eq (car form) 'declare)))
 							 body)
-					   (loop for var in (remove-duplicates
-							     (recursive-find/collect
-							      (lambda (elem)
-								(and (symbolp elem)
-								     (equalp (symbol-name elem) "_")))
-							      lambda-list) :test #'eq)
-					      do (push `(declare (ignore ,var)) declarations))
-					   `(let ((,local-result
-						   (let ((,match-success-flag nil))
-						     (catch ',catch-tag
-						       (handler-bind ((t (lambda (exn)
-									   (declare (ignore exn))
-									   (unless ,match-success-flag
-									     (throw ',catch-tag ',catch-tag)))))
-							 (destructuring-bind ,lambda-list ,var
-							   ,@declarations
-							   ,@(if where-clause
-								 `((unless ,where-clause
-								     (throw ',catch-tag ',catch-tag))))
-							   (setf ,match-success-flag t)
-							   (return-from ,block-name
-							     (progn
-							       ,@real-body))))))))
-					      (if (eq ,local-result ',catch-tag)
-						  ,result-form
-						  ,local-result)))))
+					   (let ((lambda-list (recursive-map (lambda (node)
+									       (if (and (symbolp node)
+											(equalp (symbol-name node) "_"))
+										   (let ((new-name (gensym)))
+										     (push `(declare (ignore ,new-name)) declarations)
+										     new-name)
+										   node))
+									     lambda-list)))
+					     `(let ((,local-result
+						     (let ((,match-success-flag nil))
+						       (catch ',catch-tag
+							 (handler-bind ((t (lambda (exn)
+									     (declare (ignore exn))
+									     (unless ,match-success-flag
+									       (throw ',catch-tag ',catch-tag)))))
+							   (destructuring-bind ,lambda-list ,var
+							     ,@declarations
+							     ,@(if where-clause
+								   `((unless ,where-clause
+								       (throw ',catch-tag ',catch-tag))))
+							     (setf ,match-success-flag t)
+							     (return-from ,block-name
+							       (progn
+								 ,@real-body))))))))
+						(if (eq ,local-result ',catch-tag)
+						    ,result-form
+						    ,local-result))))))
 	 do (setf result-form case-implementation))
       `(let ((,var ,expression))
 	 (block ,block-name
