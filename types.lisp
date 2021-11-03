@@ -1,23 +1,31 @@
 (in-package :lisp-binary)
 
-(defmacro define-lisp-binary-type (type-info-var lambda-list &body body)
+(defmacro define-lisp-binary-type (lambda-list type-info-var &body body)
   "Defines a LISP-BINARY type. The TYPE-INFO-VAR will be bound to a DEFBINARY-TYPE
-object that describes the field. The LAMBDA-LIST will be structurally matched against
-the :TYPE parameter specified in the DEFBINARY form. The BODY may begin with the keyword
-:WHERE followed by a form. If present, this form acts as a further condition for considering
-the LAMBDA-LIST to match the :TYPE parameter.
+object that describes the field. 
+
+The LAMBDA-LIST will be structurally matched against the :TYPE parameter specified in the DEFBINARY form. 
+The destructuring is implemented with CL:DESTRUCTURING-BIND, so it follows the same rules.
+
+The keyword :WHERE, followed by a form, may be inserted between the LAMBDA-LIST and the TYPE-INFO-VAR
+as in this example:
+
+(define-lisp-bianry-type (name b c) :where <form> type-info ...)
+
+If present, this form acts as a further condition for considering the LAMBDA-LIST to
+match the :TYPE parameter.
 
 The BODY is expected to return 3 values:
 
 1. The Lisp type that should be used to represent the instance of this LISP-BINARY type described
-   by the LAMBDA-LIST. 
+   by the LAMBDA-LIST. For example, a COUNTED-STRING is represented by a CL:STRING.
 2. A form that reads an instance of the data described by the LAMBDA-LIST from a stream whose name
    will be bound to STREAM-SYMBOL.
 3. A form that writes an instance of the data from a variable whose name will be bound to NAME, into
    a stream whose name is bound to STREAM-SYMBOL.
 
 The slots of the DEFBINARY-TYPE object provide extra information, and will be bound in the BODY using
-WITH-SLOTS. These slots are described below:
+CL:WITH-SLOTS. These slots are described below:
 
    NAME       - The name of the variable to be defined. The WRITER-FORM will be evaluated in a context
                 where the NAME is bound to the object being written.
@@ -32,9 +40,9 @@ WITH-SLOTS. These slots are described below:
    WRITER     - A user-specified writer function that overrides the default writer.
    STREAM-SYMBOL - The name that will be given to the input and output stream.
 
-   PREVIOUS-DEFS-SYMBOL - A symbol that will be bound to a list of LET bindings at runtime. In the event of
-                          an EVAL type, code is generated that will splice the LET bindings found here
-                          into a runtime-constructed LET form that will then be EVAL'd.
+   PREVIOUS-DEFS-SYMBOL - A symbol that will be bound to a list of LET bindings at runtime. If used to construct
+                          a LET form and that form is then EVAL'd, all the fields of the struct that have been
+                          read so far will be bound in the body of this LET form.
    BYTE-COUNT-NAME      - The name of the variable that will be bound to the number of bytes read or written so far.
    ALIGN                - The alignment boundary
    ELEMENT-ALIGN        - The alignment boundary for individual elements in an array.
@@ -42,15 +50,23 @@ WITH-SLOTS. These slots are described below:
                           Or it can be NIL.
  
 "
-  (let ((args (gensym)))
+  (let* ((args (gensym))
+	 (no-where-predicate (gensym))
+	 (where-predicate no-where-predicate))
+    (when (eq type-info-var :where)
+      (setf where-predicate (pop body))
+      (setf type-info-var (pop body)))
     `(push (lambda (,type-info-var &rest ,args)
 	     (declare (ignorable ,type-info-var))
 	     (bind-class-slots defbinary-type ,type-info-var
 	       (apply 
-		(destructuring-lambda ,lambda-list ,@body) ,args)))
+		(destructuring-lambda ,lambda-list ,@(unless (eq where-predicate no-where-predicate)
+						       `(:where ,where-predicate))
+				      ,@body)
+		,args)))
 	   *type-expanders*)))
 
-(define-lisp-binary-type type-info (type)
+(define-lisp-binary-type (type) type-info
   (if (gethash type *enum-definitions*)
       (values 'symbol
 	      `(read-enum ',type ,stream-symbol)
@@ -59,8 +75,9 @@ WITH-SLOTS. These slots are described below:
 	      `(read-binary ',type ,stream-symbol)
 	      `(write-binary ,name ,stream-symbol))))
 
-(define-lisp-binary-type type-info (type &key reader writer (lisp-type t))
-  :where (eq type 'custom)
+(define-lisp-binary-type (type &key reader writer (lisp-type t))
+    :where (eq type 'custom)
+    type-info
   (values lisp-type
 	  (if reader
 	      `(funcall ,reader ,stream-symbol)
@@ -69,8 +86,9 @@ WITH-SLOTS. These slots are described below:
 	      `(funcall ,writer ,name ,stream-symbol)
 	      '(progn 0))))
 
-(define-lisp-binary-type type-info (type &key raw-type member-types)
-  :where (eq type 'bit-field)
+(define-lisp-binary-type (type &key raw-type member-types)
+    :where (eq type 'bit-field)
+    type-info
   (let ((reader* nil)
 	(writer* nil))
     (letf (((slot-value type-info 'type) raw-type))
@@ -156,8 +174,9 @@ WITH-SLOTS. These slots are described below:
 	  (otherwise
 	   (error "Invalid BIT-FIELD :RAW-TYPE value: ~S" raw-type)))))))
 
-(define-lisp-binary-type type-info (type)
-  :where (eq type 'base-pointer)
+(define-lisp-binary-type (type)
+    :where (eq type 'base-pointer)
+    type-info
   (values t
 	  `(let ((file-position (file-position ,stream-symbol)))
 	     (add-base-pointer-tag ',name file-position)
@@ -167,16 +186,18 @@ WITH-SLOTS. These slots are described below:
 	     (add-base-pointer-tag ',name ,name)
 	     0)))
 
-(define-lisp-binary-type type-info (type)
-  :where (eq type 'file-position)
+(define-lisp-binary-type (type)
+    :where (eq type 'file-position)
+    type-info
   (values 'integer
 	  `(values (file-position ,stream-symbol)
 		   0)
 	  `(progn (setf ,name (file-position ,stream-symbol))
 		  0)))
 
-(define-lisp-binary-type type-info (type &key base-pointer-name)
-  :where (eq type 'region-tag)
+(define-lisp-binary-type (type &key base-pointer-name)
+    :where (eq type 'region-tag)
+    type-info
   (push name *ignore-on-write*)
   (values t
 	  `(values nil 0)
@@ -185,8 +206,9 @@ WITH-SLOTS. These slots are described below:
 				 0)
 		     ,stream-symbol)))
 
-(define-lisp-binary-type type-info (type &key pointer-type data-type base-pointer-name region-tag validator)
-  :where (eq type 'pointer)
+(define-lisp-binary-type (type &key pointer-type data-type base-pointer-name region-tag validator)
+    :where (eq type 'pointer)
+    type-info
   (block nil
     (letf (((slot-value type-info 'type) pointer-type))
       (multiple-value-bind (pointer-defstruct-type pointer-reader pointer-writer)
@@ -270,8 +292,9 @@ WITH-SLOTS. These slots are described below:
 			 (let ((,name 0))
 			   ,pointer-writer))))))))))
 
-(define-lisp-binary-type type-info (type &key (actual-type '(unsigned-byte 16)) (value 0))
-  :where (eq type 'magic)
+(define-lisp-binary-type (type &key (actual-type '(unsigned-byte 16)) (value 0))
+    :where (eq type 'magic)
+    type-info
   (if (and (listp actual-type)
 	   (eq (car actual-type) 'quote))
       (restart-case
@@ -305,8 +328,9 @@ WITH-SLOTS. These slots are described below:
 	 (setf ,name ,value)
 	 ,writer)))))
 
-(define-lisp-binary-type type-info (type length &key (external-format :latin1) (padding-character #\Nul))
-  :where (member type '(fixed-length-string fixed-string))
+(define-lisp-binary-type (type length &key (external-format :latin1) (padding-character #\Nul))
+    :where (member type '(fixed-length-string fixed-string))
+    type-info
   (values 'string
 	  (let ((bytes (gensym "BYTES-"))
 		(bytes* (gensym "BYTES*-"))
@@ -325,8 +349,9 @@ WITH-SLOTS. These slots are described below:
 	    (make-fixed-length-string ,name ,length ,external-format ,padding-character)
 	    ,stream-symbol)))
 
-(define-lisp-binary-type type-info (type count-size &key (external-format :latin1))
-  :where (member type '(counted-string counted-buffer))
+(define-lisp-binary-type (type count-size &key (external-format :latin1))
+    :where (member type '(counted-string counted-buffer))
+    type-info
   (values (ecase type
 	    ((counted-string) 'string)
 	    ((counted-buffer) '(simple-array (unsigned-byte 8))))
@@ -347,8 +372,9 @@ WITH-SLOTS. These slots are described below:
 				     name))
 				 :byte-order ,byte-order)))
 
-(define-lisp-binary-type type-info (counted-array count-size element-type &key bind-index-to)
-  :where (eq counted-array 'counted-array)
+(define-lisp-binary-type (counted-array count-size element-type &key bind-index-to)
+    :where (eq counted-array 'counted-array)
+    type-info
   (let ((count-size* (gensym "COUNT-SIZE-"))
 	(reader-value  (gensym "READER-VALUE-"))
 	(reader-byte-count (gensym "READER-BYTE-COUNT-")))
@@ -367,8 +393,9 @@ WITH-SLOTS. These slots are described below:
 			  (values ,reader-value (+ ,count-size* ,reader-byte-count)))))
 	(values (getf defstruct-type :type) reader writer)))))
 
-(define-lisp-binary-type type-info (simple-array type lengths &key bind-index-to)
-  :where (member simple-array '(simple-array))
+(define-lisp-binary-type (simple-array type lengths &key bind-index-to)
+    :where (member simple-array '(simple-array))
+    type-info
   (let ((array-count-size nil)
 	(reader* nil)
 	(writer* nil))
@@ -502,8 +529,9 @@ WITH-SLOTS. These slots are described below:
 	    (values `(simple-array ,(cadr defstruct-type))
 		    reader* writer*)))))))
 
-(define-lisp-binary-type type-info (type-name type-generating-form)
-  :where (eq type-name 'eval)
+(define-lisp-binary-type (type-name type-generating-form)
+    :where (eq type-name 'eval)
+    type-info
   (let ((case-template nil)
 	(readers nil)
 	(writers nil))
@@ -574,8 +602,9 @@ WITH-SLOTS. These slots are described below:
 			       :byte-order ,byte-order :align ,align
 			       :element-align ,element-align))))))
 
-(define-lisp-binary-type type-info (byte-type bits &key (signed-representation :twos-complement))
-  :where (member byte-type '(unsigned-byte signed-byte))
+(define-lisp-binary-type (byte-type bits &key (signed-representation :twos-complement))
+    :where (member byte-type '(unsigned-byte signed-byte))
+    type-info
   (values `(,byte-type ,bits)
 	  `(read-integer ,(/ bits 8) ,stream-symbol
 			 :byte-order ,byte-order
@@ -586,9 +615,10 @@ WITH-SLOTS. These slots are described below:
 			  :signed-representation ,signed-representation
 			  :signed ,(eq byte-type 'signed-byte))))
 
-(define-lisp-binary-type type-info (float-type &key (byte-order byte-order))
+(define-lisp-binary-type (float-type &key (byte-order byte-order))
   :where (member float-type '(float single-float half-float double-float quadruple-float quad-float
 			      octuple-float octo-float))
+  type-info
   (let ((float-format (case float-type
 			(half-float :half)
 			((float single-float) :single)
@@ -607,14 +637,16 @@ WITH-SLOTS. These slots are described below:
 	    `(write-float ,float-format ,name :stream ,stream-symbol
 			  :byte-order ,byte-order))))
 
-(define-lisp-binary-type type-info (null-type)
-  :where (eq null-type 'null)
+(define-lisp-binary-type (null-type)
+    :where (eq null-type 'null)
+    type-info
   (values t
 	  `(progn (values nil 0))
 	  `(progn 0)))
 
-(define-lisp-binary-type type-info (type termination-length &key (external-format :latin1) (terminator 0))
-  :where (member type '(terminated-string terminated-buffer))
+(define-lisp-binary-type (type termination-length &key (external-format :latin1) (terminator 0))
+    :where (member type '(terminated-string terminated-buffer))
+    type-info
   (let ((real-terminator `(ecase ,byte-order
 			    ((:little-endian) (encode-lsb (or ,terminator 0) ,termination-length))
 			    ((:big-endian) (encode-msb (or ,terminator 0) ,termination-length)))))
@@ -631,8 +663,9 @@ WITH-SLOTS. These slots are described below:
        reader
        `(write-terminated-string ,name ,stream-symbol :terminator ,real-terminator)))))
 
-(define-lisp-binary-type type-info (type)
-  :where (integerp type)
+(define-lisp-binary-type (type)
+    :where (integerp type)
+    type-info
   ;; Let a positive numeric type n be shorthand for (unsigned-byte n),
   ;; and a negative one be shorthand for (signed-byte -n).
   (setf (slot-value type-info 'type)
