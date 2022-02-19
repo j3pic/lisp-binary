@@ -180,7 +180,7 @@ WRITER returns bytes-written).
 					     :writer ,writer
 					     :variables ,(let ((counter -1))
 							      `(list ,@(loop for val in values
-									  if (listp val)
+									  if (and val (listp val))
 									  do (setf counter (- (second val) 1))
 									     (setf val (car val))
 									  collect `(cons ',val ,(incf counter))))))))
