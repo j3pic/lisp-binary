@@ -17,13 +17,8 @@
      ,@body))
 
 (defmacro with-write-stream-to-buffer (&body body)
-  `(progn
-     (with-open-binary-file (*stream* "/tmp/foobar.bin"
-				      :direction :output
-				      :if-exists :supersede)
-       ,@body)
-     (with-open-binary-file (in "/tmp/foobar.bin")
-       (read-binary-type `(simple-array (unsigned-byte 8) (,(file-length in))) in))))
+  `(flexi-streams:with-output-to-sequence (*stream*)
+     ,@body))
 
 (defun expand-defbinary-field (default-value &rest keys)
   (apply #'lisp-binary::expand-defbinary-field (list* '*field* default-value

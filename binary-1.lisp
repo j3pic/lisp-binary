@@ -138,7 +138,10 @@ open in :DIRECTION :OUT"
     (size 0 :type number)
     (signed nil :type boolean)
     (byte-order :little-endian :type keyword)
-    (variables nil :type list)))
+    (variables nil :type list)
+    (signed-representation :twos-complement :type keyword)
+    (reader nil)
+    (writer nil)))
 
 (defun get-enum-definition (symbol)
   (gethash symbol *enum-definitions* nil))
@@ -148,7 +151,8 @@ open in :DIRECTION :OUT"
   (and (get-enum-definition symbol)
        t))
 
-(defmacro define-enum (name size/bytes (&key signed (byte-order :little-endian)) &rest values)
+(defmacro define-enum (name size/bytes (&key signed (signed-representation :twos-complement)
+					     (byte-order :little-endian) (reader '#'read-integer) (writer '#'write-integer)) &rest values)
   "Define an enum type. What this does is allow LISP-BINARY to automatically map between
 keywords and integer values that are expected to be found in a binary file. The SIZE is in bytes.
 
@@ -159,6 +163,11 @@ Example:
        light-speed          ;; Implicitly 1
        (ridiculous-speed 5) ;; Explicit value
        ludicrous-speed)     ;; Implicitly 6
+
+The READER and WRITER functions must accept the same lambda-lists
+as READ-INTEGER and WRITE-INTEGER, and have the same return
+values (ie, the READER returns (VALUES object bytes-read) and the
+WRITER returns bytes-written).
 "
 
   `(eval-when (:compile-toplevel :load-toplevel :execute)
@@ -166,6 +175,9 @@ Example:
 					     :name ',name
 					     :byte-order ,byte-order
 					     :signed ,signed
+					     :signed-representation ,signed-representation
+					     :reader ,reader
+					     :writer ,writer
 					     :variables ,(let ((counter -1))
 							      `(list ,@(loop for val in values
 									  if (listp val)
@@ -197,26 +209,28 @@ Example:
   (let ((enum-def (if (enum-definition-p enum)
 		       enum
 		       (gethash enum *enum-definitions*))))
-    (write-integer (get-enum-value enum-def symbol)
-		   (slot-value enum-def 'size)
-		   stream
-		   :byte-order (let ((byte-order (slot-value enum-def 'byte-order)))
-				 (if (eq byte-order :dynamic)
-				     *byte-order*
-				     byte-order))
-		   :signed (slot-value enum-def 'signed))))
+    (funcall (slot-value enum-def 'writer)
+	     (get-enum-value enum-def symbol)
+	     (slot-value enum-def 'size)
+	     stream
+	     :byte-order (let ((byte-order (slot-value enum-def 'byte-order)))
+			   (if (eq byte-order :dynamic)
+			       *byte-order*
+			       byte-order))
+	     :signed (slot-value enum-def 'signed))))
 
 (defun read-enum (enum stream)
   (let ((enum-def (if (enum-definition-p enum)
 		      enum
 		      (gethash enum *enum-definitions*))))
     (multiple-value-bind (raw-value bytes-read)
-	(read-integer (slot-value enum-def 'size) stream
-		      :byte-order (let ((byte-order (slot-value enum-def 'byte-order)))
-				    (if (eq byte-order :dynamic)
-					*byte-order*
-					byte-order))
-		      :signed (slot-value enum-def 'signed))
+	(funcall (slot-value enum-def 'reader)
+		 (slot-value enum-def 'size) stream
+		 :byte-order (let ((byte-order (slot-value enum-def 'byte-order)))
+			       (if (eq byte-order :dynamic)
+				   *byte-order*
+				   byte-order))
+		 :signed (slot-value enum-def 'signed))
       (values
        (or (get-enum-name enum-def raw-value)
 	   (error 'bad-enum-value
@@ -831,7 +845,9 @@ bindings of all the relevant special variables."
   "Write the VALUE, interpreting it as type TYPE, to the STREAM. The TYPE is any type supported by the
 DEFBINARY macro."
   (read/write-binary-type :write type stream :byte-order byte-order
-			  :value value
+			  :value (if (symbolp value)
+				     `',value
+				     value)
 			  :align align :element-align element-align))
 
 

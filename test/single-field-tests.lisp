@@ -137,3 +137,36 @@
      (write-binary-type #x0c0c0c0c `(eval (case t (otherwise '(unsigned-byte 32)))) *stream*))
    #(12 12 12 12)))
 
+(define-enum simple-enum 1 (:byte-order :big-endian)
+   zero one two)
+
+(unit-test 'simple-enum-test
+    (with-read-stream #(0 1 2)
+      (assert-equalp (read-binary-type 'simple-enum *stream*) 'zero)
+      (assert-equalp (read-binary-type 'simple-enum *stream*) 'one)
+      (assert-equalp (read-binary-type 'simple-enum *stream*) 'two))
+  (assert-equalp
+      (with-write-stream-to-buffer
+	(loop for symbol in '(zero one two)
+	   do (write-binary-type symbol 'simple-enum *stream*)))
+      #(0 1 2)))
+
+(define-enum custom-reader-enum 1 (:reader (lambda (size stream &rest boo-hoo)
+					     (declare (ignore boo-hoo size stream))
+					     (values 123 1))
+				   :writer (lambda (n size stream &rest boo-hoo)
+					     (declare (ignore boo-hoo size n))
+					     (write-integer 255 1 stream)))
+	     (:the-value 123))
+
+(unit-test 'custom-reader-enum-test
+  (with-read-stream #(0 1 2 3)
+    (multiple-value-bind (value bytes-read)
+	(read-binary-type 'custom-reader-enum *stream*)
+      (assert-equalp value :the-value)
+      (assert= bytes-read 1)))
+  (assert-equalp
+      (with-write-stream-to-buffer
+	(assert= (write-binary-type :whatever 'custom-reader-enum *stream*)
+	    1))
+      #(255)))
