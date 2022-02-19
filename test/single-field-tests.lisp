@@ -170,3 +170,18 @@
 	(assert= (write-binary-type :whatever 'custom-reader-enum *stream*)
 	    1))
       #(255)))
+
+(define-enum boolean-enum 1 ()
+  (nil 0)
+  (t 1))
+
+(unit-test 'boolean-enum-test
+    (with-read-stream #(0 1)
+      (assert-equalp
+	  (loop repeat 2 collect (read-binary-type 'boolean-enum *stream*))
+	  '(nil t)))
+  (assert-equalp
+      (with-write-stream-to-buffer
+	(loop for val in '(t nil)
+	   do (write-binary-type val 'boolean-enum *stream*)))
+      #(1 0)))

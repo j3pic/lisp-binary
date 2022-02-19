@@ -201,7 +201,14 @@ WRITER returns bytes-written).
   (let ((definition (if (enum-definition-p enum)
 			enum
 			(gethash enum *enum-definitions*))))
-    (car (assoc-cdr value (slot-value definition 'variables)))))
+    (aif (assoc-cdr value (slot-value definition 'variables))
+	 (car it)
+	 (error 'bad-enum-value
+		  :integer-value value
+		  :symbol-value nil
+		  :enum-name (slot-value definition 'name)
+		  :format-control "Value ~a is not a value in enum ~a"
+		  :format-arguments (list value (slot-value definition 'name))))))
 
 (defparameter *byte-order* :little-endian)
 
@@ -220,6 +227,7 @@ WRITER returns bytes-written).
 	     :signed (slot-value enum-def 'signed))))
 
 (defun read-enum (enum stream)
+  (declare (optimize (debug 3)))
   (let ((enum-def (if (enum-definition-p enum)
 		      enum
 		      (gethash enum *enum-definitions*))))
@@ -232,13 +240,7 @@ WRITER returns bytes-written).
 				   byte-order))
 		 :signed (slot-value enum-def 'signed))
       (values
-       (or (get-enum-name enum-def raw-value)
-	   (error 'bad-enum-value
-		  :integer-value raw-value
-		  :symbol-value nil
-		  :enum-name (slot-value enum-def 'name)
-		  :format-control "Value ~a is not a value in enum ~a"
-		  :format-arguments (list raw-value (slot-value enum-def 'name))))
+       (get-enum-name enum-def raw-value)
        bytes-read))))
 
 (defun decode-ip-addr (raw-msb)
