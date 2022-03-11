@@ -848,7 +848,7 @@ bindings of all the relevant special variables."
 DEFBINARY macro."
   (read/write-binary-type :write type stream :byte-order byte-order
 			  :value (if (symbolp value)
-				     `',value
+				     (list 'quote value)
 				     value)
 			  :align align :element-align element-align))
 
