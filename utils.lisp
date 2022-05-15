@@ -174,6 +174,30 @@ to a list of variables, and will expand to a nested MULTIPLE-VALUE-BIND expressi
 				(list result)))))
     result))
 
+(defmacro let-values (bindings &body body)
+  (flet ((multiple-value-binding-p (binding)
+	   (listp (car binding))))
+    (if (null bindings)
+	`(let nil ,@body)
+	(let ((multiple-bindings (remove-if-not #'multiple-value-binding-p bindings))
+	      (single-bindings (remove-if #'multiple-value-binding-p bindings)))
+	  (let ((name->gensym (make-hash-table :test 'eq)))
+	    (loop for var in (apply #'append (mapcar #'car multiple-bindings))
+	       for g = (gensym)
+	       do (setf (gethash var name->gensym) g))
+	    (let ((final-form `(let ,(append
+				      (loop for binding in multiple-bindings
+					 append (loop for var in (car binding)
+						   collect `(,var ,(gethash var name->gensym))))
+				      single-bindings)
+				 ,@body)))
+	      (loop for (variables expression) in multiple-bindings
+		 do (setf final-form `(multiple-value-bind ,(loop for v in variables
+							       collect (gethash v name->gensym))
+					  ,expression
+					,final-form)))
+	      final-form))))))
+
 (defun recursive-map (function tree)
   (mapcar (lambda (node)
 	    (if (listp node)
