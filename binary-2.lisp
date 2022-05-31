@@ -413,6 +413,7 @@ STREAM-NAMES."
 				 &key (byte-order :little-endian)
 				 (preserve-*byte-order* t)
 				 align
+				 documentation
                                  export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
   "Defines a struct that represents binary data. Also generates two methods for this struct, named
 READ-BINARY and WRITE-BINARY, which (de)serialize the struct to or from a stream. The serialization is
@@ -965,7 +966,7 @@ FLOATING-POINT NUMBERS
 
 "
   (setf defstruct-options
-	(remove-plist-keys defstruct-options :export :byte-order :byte-count-name :align :preserve-*byte-order*))
+	(remove-plist-keys defstruct-options :export :byte-order :byte-count-name :align :preserve-*byte-order* :documentation))
   (let-values* ((stream-symbol (gensym "STREAM-SYMBOL-"))
 		(*ignore-on-write* nil)
 		(bit-stream-groups (make-hash-table))
@@ -986,6 +987,9 @@ FLOATING-POINT NUMBERS
 				      (cons name
 					    (remove-plist-keys defstruct-options :byte-order))
 				      name))
+		(documentation (if documentation
+				   (list documentation)
+				   nil))
 		(previous-defs nil))    
     (declare (optimize (safety 3)))
     
@@ -1000,7 +1004,7 @@ FLOATING-POINT NUMBERS
 	   form
 	   (remove-binding '*byte-order* form)))
      `(progn
-	(defstruct ,name-and-options
+	(defstruct ,name-and-options ,@documentation
 	  ,@(loop for (name default-value . options) in
 		 (mapcar #'binary-field-defstruct-field fields)
 	       for type = (getf options :type)
