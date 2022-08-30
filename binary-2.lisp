@@ -986,7 +986,8 @@ FLOATING-POINT NUMBERS
 									 byte-order)))))))
 		(name-and-options (if defstruct-options
 				      (cons name
-					    (remove-plist-keys defstruct-options :byte-order))
+					(loop for (key value) on (remove-plist-keys defstruct-options :byte-order) by #'cddr
+                                                  collect (list key value)))
 				      name))
 		(documentation (if documentation
 				   (list documentation)
