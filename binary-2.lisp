@@ -41,7 +41,8 @@
     (or (if (consp con)
 	    (car con)
 	    con)
-	(intern (format nil "MAKE-~a" name) (symbol-package name)))))
+	(let ((*print-case* :upcase))
+          (intern (format nil "MAKE-~a" name) (symbol-package name))))))
 
 (defun expand-defbinary-field (name default-value &rest other-keys &key type (byte-order :little-endian)
 							      byte-count-name
