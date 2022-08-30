@@ -214,10 +214,11 @@ to a list of variables, and will expand to a nested MULTIPLE-VALUE-BIND expressi
        node)) form))
 
 (defun expand-struct-like-defclass-slot (class-name name default-value &key type)
-  `(,name :accessor ,(intern (format nil "~a-~a" class-name name))
-	  :initform ,default-value
-	  :initarg ,(intern (symbol-name name) :keyword)
-	  ,@(if type `(:type ,type))))
+  (let ((*print-case* :upcase))
+    `(,name :accessor ,(intern (format nil "~a-~a" class-name name))
+	    :initform ,default-value
+	    :initarg ,(intern (symbol-name name) :keyword)
+	    ,@(if type `(:type ,type)))))
 
 (defun add-default-value-if-needed (def)
   (if (keywordp (car def))
