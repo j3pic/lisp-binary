@@ -5,14 +5,16 @@
 
 (in-package :simple-bit-stream)
 
-(defclass bit-stream (fundamental-binary-stream)
+(defclass bit-stream (fundamental-binary-stream fundamental-input-stream fundamental-output-stream)
   ((element-bits :type fixnum :initform 8 :initarg :element-bits)
    (real-stream :type stream :initarg :real-stream)
    (last-byte :type (or unsigned-byte null) :initform 0)
    (last-op :type symbol :initform nil)
    (bits-left :type integer :initform 0)
    (byte-order :type keyword :initarg :byte-order :initform :little-endian)))
-       		
+
+(defmethod stream-element-type ((stream bit-stream))
+  '(unsigned-byte 8))
 
 (defun byte-aligned-p (bit-stream)
   (= (slot-value bit-stream 'bits-left) 0))
@@ -196,9 +198,15 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	      do (write-byte (elt sequence ix) stream))
 	   sequence)))
 
-#-sbcl
-(defmethod stream-write-sequence ((stream bit-stream) sequence start end &key &allow-other-keys)
+#-(or sbcl clisp)
+(defmethod stream-write-sequence
+    (sequence (stream bit-stream) start end &key &allow-other-keys)
   (%stream-write-sequence stream sequence (or start 0) (or end (1- (length sequence)))))
+
+#+clisp
+(defmethod gray:stream-write-sequence (sequence (stream bit-stream)
+				       &key start end &allow-other-keys)
+    (%stream-write-sequence stream sequence (or start 0) (or end (1- (length sequence)))))  
 
 #+ccl
 (defmethod ccl:stream-write-vector ((stream bit-stream) vector start end)
@@ -211,7 +219,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defun %stream-read-sequence (stream sequence start end)
   (declare (optimize (speed 0) (debug 3)))
   (unless (> end start)
-    (return-from %stream-read-sequence sequence))
+    (return-from %stream-read-sequence 0))
   (init-read stream)
   (cond ((and (equal (slot-value stream 'bits-left) 0)
 	      (streamp (slot-value stream 'real-stream)))
@@ -226,9 +234,15 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	    count t into bytes-read
 	    finally (return bytes-read)))))
 
-#-sbcl
-(defmethod #+ccl ccl:stream-read-vector #-ccl stream-read-sequence  ((stream bit-stream) sequence start end
-                                                                     #-ccl &key #-ccl &allow-other-keys)
+#-(or sbcl clisp)
+(defmethod
+    #+ccl ccl:stream-read-vector
+    #-ccl stream-read-sequence
+    (sequence (stream bit-stream) start end &key &allow-other-keys)
+  (%stream-read-sequence stream sequence start end))
+
+#+clisp
+(defmethod gray:stream-read-sequence (sequence (stream bit-stream) &key (start 0) (end (length sequence)) &allow-other-keys)
   (%stream-read-sequence stream sequence start end))
 
 #+sbcl
