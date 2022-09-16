@@ -123,19 +123,29 @@
 		     (let ((input-binary (read-binary 'simple-binary *standard-input*)))
 		       (assert-equal simple-binary input-binary)))))
 
-(unit-test 'octuple-precision-floating-point-test ()
-  (test-round-trip "OCTUPLE PRECISION FLOATING POINT TEST"
-		   (write-binary-type 0 'octuple-float *standard-output*)
-		   (assert (= (read-binary-type 'octuple-float *standard-input*)
-			      0))))
+(unit-test 'quadruple-precision-floating-point-test ()
+  (test-round-trip "QUADRUPLE PRECISION FLOATING POINT TEST"
+		   (write-binary-type 3/2 'quadruple-float *standard-output*)
+		   (assert (= (read-binary-type 'quadruple-float *standard-input*)
+			      3/2))))
 
 (unit-test 'octuple-precision-floating-point-test 
   (test-round-trip "OCTUPLE PRECISION FLOATING POINT TEST"
-		   (write-binary-type 0 'octuple-float *standard-output*)
+		   (write-binary-type 3/2 'octuple-float *standard-output*)
 		   (assert (= (read-binary-type 'octuple-float *standard-input*)
-			      0))))
+			      3/2))))
 
+;; FIXME: This test fails. I've determined that it's the encoding side that is
+;;        incorrect. When using hardware, 1.5d0 encodes as 4609434218613702656,
+;;        which decodes correctly using arithmetic. But the arithmetic encoder
+;;        is coming up with 4607182418800017408. Decoding is correct.
 
+(unit-test 'double-precision-floating-point-test
+  (test-round-trip "DOUBLE PRECISION FLOATING POINT TEST"
+		   (write-binary-type 1.5d0 'double-float *standard-output*)
+		   (assert= (read-binary-type 'double-float *standard-input*)
+			    1.5d0)))
+		   
 (defun other-binary-dynamic-test (&optional (*byte-order* :little-endian))
   (let ((other-binary (make-dynamic-other-binary :x 0 :y #x20)))
     (test-round-trip (format nil "BIT STREAMS - DYNAMIC BYTE ORDER ~a TEST" *byte-order*)
@@ -301,10 +311,13 @@
     (loop for *byte-order* in '(:little-endian :big-endian)
        do
 	 (test-round-trip (format nil "IMPLICIT BIT STREAM TEST (~a)" *byte-order*)
-			  (write-binary struct *standard-output*)
+			  (with-wrapped-in-bit-stream (*standard-output* *standard-output*)
+			    (write-binary struct *standard-output*))
 			  (assert-equalp struct
-					 (read-binary 'implicit-bit-stream
-						      *standard-input*))))))
+					 (with-wrapped-in-bit-stream
+					     (*standard-input* *standard-input*)
+					   (read-binary 'implicit-bit-stream
+							*standard-input*)))))))
 
 (defun run-test ()
   (let ((test-results (do-tests)))
