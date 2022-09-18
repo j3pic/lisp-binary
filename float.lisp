@@ -26,7 +26,8 @@
 ;; instead of failing gracefully.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  #+(or sbcl ccl)
+  #+(and (or sbcl ccl)
+	 cffi)
   (progn
     (pushnew :float-infinity *features*)
     (pushnew :float-quiet-nan *features*)))
@@ -89,15 +90,12 @@ calculate its numerical value."
      significand
      (expt base exponent)))
 
-
-(defun calculate-exponent (sign fraction significand)
-  (coerce
-   (floor
-    (/ (log (/ (* fraction (expt -1 sign))
-	       significand))
-       (log 2)))
-   'integer))
-
+(defun calculate-exponent (sign fraction)
+  (declare (ignore significand))
+  (coerce (floor
+	   (/ (log (* fraction (expt -1 sign)))
+	      (log 2)))
+	  'integer))
 
 (defmacro popbit (place)
   `(prog1 (logand ,place 1)
@@ -215,10 +213,11 @@ a smaller 32- or 64-bit float.
     ;; does something crazy that results in the DECODE-FLOAT-BITS/ARITHMETIC
     ;; expansion always being chosen.
     #+ccl (declare (optimize (speed 0) (debug 3)))
-    (cond ((and (member format '(:single :double))
+    (cond #+cffi
+	  ((and (member format '(:single :double))
 		(member result-type '('float 'single-float 'double-float) :test #'equal))
 	   `(float-coerce (decode-float-bits/cffi ,integer :format ,format)
-		    ,result-type))
+			  ,result-type))
 	  ((keywordp format)
 	   (destructuring-bind (format significand-bits exponent-bits exponent-bias) (get-format format)
 	     (declare (ignore format))
@@ -273,6 +272,12 @@ number of bits in the significand. Does not add the implicit bit."
 	   (= significand (ash 1 (- significand-bits 3))))))
   
   (defun decode-significand (significand significand-bits raw-exponent)
+    "Given an encoded SIGNIFICAND of length SIGNIFICAND-BITS, calculate the
+number it represents. RAW-EXPONENT is only used to determine whether to use
+the denormalized interpretation of the SIGNIFICAND. The value of SIGNIFICAND-BITS
+includes the 'implicit bit' which is not actually encoded in the significand. So,
+if the SIGNIFICAND is physically 23 bits, plus one implicit bit, then SIGNIFICAND-BITS
+is 24."
     (unless (= 0 raw-exponent)
       ;; If the exponent is all 0s, that means we're decoding a "denormalized"
       ;; number with no implicit leading 1 bit.
@@ -360,23 +365,26 @@ so I don't know what it should be for other types, nor what the largest denormal
 	       (1- significand-bits))
 	  (ash 1 (- significand-bits 3))))
 
-(defun calculate-significand (fraction significand-bits)
+(defun calculate-significand (fraction exponent significand-bits)
   "Given a FRACTION and number of SIGNIFICAND-BITS, calculates the
 integer significand. The significand returned includes the implicit
 bit, which must be removed in the final floating-point encoding."
   (multiple-value-bind (int-part frac-part)
-      (floor fraction)
-    (let ((bits-consumed (loop for n from 0 unless
-			      (< (ash 1 n) int-part)
-			    return n)))
+      (floor (/ fraction (expt 2 exponent)))
+    (let ((bits-consumed (if (= int-part 0)
+			     0
+			     (1+ (loop for n from 0 unless
+				  (< (ash 1 n) int-part)
+				return n)))))
       (logior
        (ash int-part (- significand-bits bits-consumed))
-	(loop for bit downfrom (- significand-bits (incf bits-consumed))
-	   repeat (1+ (- significand-bits bits-consumed))
-	   sum (multiple-value-bind (int frac)
-		   (floor (* frac-part 2))
-		 (setf frac-part frac)
-		 (ash int bit)))))))
+       (loop for bit downfrom (- significand-bits bits-consumed)
+	  repeat (- significand-bits bits-consumed)
+	  sum (multiple-value-bind (int frac)
+		  (floor (* frac-part 2))
+		(setf frac-part frac)
+		(incf bits-consumed)
+		(ash int (1- bit))))))))
 
 (defun encode-float-bits/arithmetic (fraction significand-bits exponent-bits exponent-bias)
   "Calculate the bits of a floating-point number using plain arithmetic, given the FRACTION
@@ -411,12 +419,12 @@ value is an integer."
      (let* ((denormalp (denormalp/arithmetic fraction significand-bits exponent-bits exponent-bias))
 	    (sign (if (> fraction 0)
 		      0 1))
-	    (significand (if denormalp
-			     (calculate-significand (/ fraction (expt 2 (- (1- exponent-bias)))) (1- significand-bits))
-			     (calculate-significand fraction significand-bits)))
 	    (exponent (if denormalp
 			  0
-			  (calculate-exponent sign fraction (decode-significand significand significand-bits #b11111)))))
+			  (calculate-exponent sign fraction)))
+	    (significand (if denormalp
+			     (calculate-significand (/ fraction (expt 2 (- (1- exponent-bias)))) exponent (1- significand-bits))
+			     (calculate-significand fraction exponent significand-bits))))
        (logior (ash sign (+ (1- significand-bits) exponent-bits))
 	       (logand
 		(1- (ash 1 (1- significand-bits)))
@@ -426,6 +434,7 @@ value is an integer."
 		    (+ exponent exponent-bias))
 		(1- significand-bits)))))))
 
+#+cffi
 (defun encode-float-bits/cffi (fraction &key (format :single))
   (declare (type float fraction))
   (multiple-value-bind (c-float-type c-int-type lisp-type)
@@ -436,6 +445,7 @@ value is an integer."
       (setf (cffi:mem-ref x c-float-type) (coerce fraction lisp-type))      
       (cffi:mem-ref x c-int-type))))
 
+#+cffi
 (defun encode-float-bits/runtime-format (fraction format)
   (if (member format '(:single :double))
       (encode-float-bits/cffi (coerce fraction 'float) :format format)
@@ -457,14 +467,17 @@ value is an integer."
 	 (alexandria:with-gensyms (fraction-value)
 	   #-(and float-infinity float-quiet-nan float-signalling-nan)
 	   `(let ((,fraction-value ,fraction))
+	      #+cffi
 	      (if (symbolp ,fraction-value)
 		  (encode-float-bits/arithmetic-macro ,fraction-value ,format)
-		  (encode-float-bits/cffi (coerce ,fraction-value 'float) :format ,format)))
+		  (encode-float-bits/cffi (coerce ,fraction-value 'float) :format ,format))
+	      #-cffi
+	      (encode-float-bits/arithmetic-macro ,fraction-value ,format))
 	   #+(and float-infinity float-quiet-nan float-signalling-nan)
 	   `(encode-float-bits/cffi (coerce ,fraction-value 'float) :format ,format)))
 	(t `(encode-float-bits/arithmetic-macro ,fraction ,format))))
 
-
+#+cffi
 (defun decode-float-bits/cffi (integer &key (format :single))
   "Decodes the bits from a read-in floating-point number using the hardware. Assumes
 that only :SINGLE and :DOUBLE work."
