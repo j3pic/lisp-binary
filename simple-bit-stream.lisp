@@ -120,7 +120,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defmethod stream-read-byte ((stream bit-stream))
   (init-read stream)
   (cond ((= (slot-value stream 'bits-left) 0)
-	 (read-byte stream (slot-value stream 'real-stream)))
+	 (read-byte (slot-value stream 'real-stream)))
 	((= (slot-value stream 'bits-left)
 	    (slot-value stream 'element-bits))
 	 (prog1
