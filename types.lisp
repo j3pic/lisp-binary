@@ -553,7 +553,8 @@
 						octuple-float octo-float) 'long-float)
 		      (otherwise 'number))))
     (values float-type
-	    `(read-float ,float-format :stream ,stream-symbol :byte-order ,byte-order)
+	    `(read-float ,float-format :stream ,stream-symbol :byte-order ,byte-order
+			 :result-type ',float-type)
 	    `(write-float ,float-format ,name :stream ,stream-symbol
 			  :byte-order ,byte-order))))
 
