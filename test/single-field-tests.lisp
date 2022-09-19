@@ -60,7 +60,7 @@
 	   (test-buffer (flexi-streams:with-output-to-sequence
 			    (out :element-type '(unsigned-byte 8))
 			  (write-binary-type test-value 'single-float out :byte-order :big-endian))))
-      (assert-equalp test-buffer (buffer 0 #x7f #xff #xff))
+      (assert-equalp test-buffer (buffer 0 #x40 0 0))
       (assert= (flexi-streams:with-input-from-sequence
 		   (in test-buffer)
 		 (read-binary-type 'single-float in :byte-order :big-endian))

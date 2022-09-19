@@ -91,7 +91,6 @@ calculate its numerical value."
      (expt base exponent)))
 
 (defun calculate-exponent (sign fraction)
-  (declare (ignore significand))
   (coerce (floor
 	   (/ (log (* fraction (expt -1 sign)))
 	      (log 2)))
@@ -157,7 +156,10 @@ to a number."
 	     value))
 	((nanp value)
 	 value)
-	(t (coerce value result-type))))
+	(t (handler-case (coerce value result-type)
+	     #+clisp
+	     (system::simple-floating-point-underflow ()
+	       value)))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   ;; Syntax:
@@ -195,6 +197,27 @@ to a number."
 
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
+  (defmacro decode-float-bits/arithmetic-macro (integer &key (format :single) (result-type ''single-float))
+    (alexandria:with-gensyms (runtime-format result-type* integer* significand-bits exponent-bits exponent-bias temp-result)
+      `(let ((,result-type* ,result-type)
+	     (,integer* ,integer))
+	 ,(cond ((keywordp format)
+		 (destructuring-bind (format significand-bits exponent-bits exponent-bias) (get-format format)
+		   (declare (ignore format))
+		   `(let ((,temp-result (decode-float-bits/arithmetic ,integer* ,significand-bits ,exponent-bits ,exponent-bias)))
+		      (if (or (nanp ,temp-result)
+			      (infinityp ,temp-result))
+			  ,temp-result
+			  (float-coerce ,temp-result ,result-type*)))))
+	       (t
+		`(destructuring-bind (,runtime-format ,significand-bits ,exponent-bits ,exponent-bias) (get-format ,format)
+		   (declare (ignore ,runtime-format))
+		   (let ((,temp-result (decode-float-bits/arithmetic ,integer* ,significand-bits ,exponent-bits ,exponent-bias)))
+		     (if (or (nanp ,temp-result)
+			     (infinityp ,temp-result))
+			 ,temp-result
+			 (float-coerce ,temp-result ,result-type*)))))))))
+  
   (defmacro decode-float-bits (integer &key (format :single)
 					 (result-type ''float))
     "Decodes the bits from an IEEE floating point number. Supported formats are
@@ -213,33 +236,21 @@ a smaller 32- or 64-bit float.
     ;; does something crazy that results in the DECODE-FLOAT-BITS/ARITHMETIC
     ;; expansion always being chosen.
     #+ccl (declare (optimize (speed 0) (debug 3)))
-    (cond #+cffi
-	  ((and (member format '(:single :double))
-		(member result-type '('float 'single-float 'double-float) :test #'equal))
-	   `(float-coerce (decode-float-bits/cffi ,integer :format ,format)
-			  ,result-type))
-	  ((keywordp format)
-	   (destructuring-bind (format significand-bits exponent-bits exponent-bias) (get-format format)
-	     (declare (ignore format))
-	     (let ((temp-result (gensym)))
-	       `(let ((,temp-result (decode-float-bits/arithmetic ,integer ,significand-bits ,exponent-bits ,exponent-bias)))
-		  (if (or (nanp ,temp-result)
-			  (infinityp ,temp-result))
-		      ,temp-result
-		      (float-coerce ,temp-result ,result-type))))))
-	  (t (let ((runtime-format (gensym))
-		   (significand-bits (gensym))
-		   (exponent-bits (gensym))
-		   (exponent-bias (gensym))
-		   (temp-result (gensym)))
-	       `(destructuring-bind (,runtime-format ,significand-bits ,exponent-bits ,exponent-bias) (get-format ,format)
-		  (declare (ignore ,runtime-format))
-		  (let ((,temp-result (decode-float-bits/arithmetic ,integer ,significand-bits ,exponent-bits ,exponent-bias)))
-		    (if (or (nanp ,temp-result)
-			    (infinityp ,temp-result))
-			,temp-result
-			(float-coerce ,temp-result ,result-type))))))))
-
+    (alexandria:with-gensyms (integer* format* result-type*)
+      `(let ((,integer* ,integer)
+	     (,format* ,format)
+	     (,result-type* ,result-type))
+	 ,(cond #+cffi
+		((and (member format '(:single :double))
+		      (member result-type '('float 'single-float 'double-float) :test #'equal))
+		 `(handler-case
+		      (float-coerce (decode-float-bits/cffi ,integer* :format ,format*)
+				    ,result-type*)
+		    #+clisp
+		    (system::simple-floating-point-underflow ()
+		      (decode-float-bits/arithmetic-macro ,integer* :format ,format* :result-type ,result-type*))))
+		(t `(decode-float-bits/arithmetic-macro ,integer* :format ,format* :result-type ,result-type*)))))))
+  
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun get-exponent (integer significand-bits exponent-bits exponent-bias)
     (- (logand (- (ash 1 exponent-bits) 1)
@@ -310,11 +321,10 @@ is 24."
 	     (float-value sign (decode-significand significand significand-bits 0) (- (1- exponent-bias))))
 	    (t
 	     (float-value sign (decode-significand significand significand-bits
-						   (get-exponent integer significand-bits exponent-bits 0)) exponent))))))
+						   (get-exponent integer significand-bits exponent-bits 0)) exponent)))))
 
 
-(defun make-smallest-denormal (format result-type)
-    "FIXME: I don't know what the largest denormal value should be."
+  (defun make-smallest-denormal (format result-type)
     (decode-float-bits 1 :format format :result-type result-type))
   
   (defun make-largest-denormal (format result-type)
@@ -469,7 +479,14 @@ value is an integer."
 	      #+cffi
 	      (if (symbolp ,fraction-value)
 		  (encode-float-bits/arithmetic-macro ,fraction-value ,format)
-		  (encode-float-bits/cffi (coerce ,fraction-value 'float) :format ,format))
+		  (handler-case
+		      (encode-float-bits/cffi (coerce ,fraction-value ,(case format
+									 (:single ''single-float)
+									 (:double ''double-float)))
+					      :format ,format)
+		    #+clisp
+		    (system::simple-floating-point-underflow ()
+		      (encode-float-bits/arithmetic-macro ,fraction-value ,format))))
 	      #-cffi
 	      (encode-float-bits/arithmetic-macro ,fraction-value ,format))
 	   #+(and float-infinity float-quiet-nan float-signalling-nan)
