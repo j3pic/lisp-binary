@@ -314,8 +314,7 @@ is 24."
 
 
 (defun make-smallest-denormal (format result-type)
-    "FIXME: The actual smallest denormal for :SINGLE should be 2^-149, not 2^-127. I have no idea how to derive that value,
-so I don't know what it should be for other types, nor what the largest denormal value should be."
+    "FIXME: I don't know what the largest denormal value should be."
     (decode-float-bits 1 :format format :result-type result-type))
   
   (defun make-largest-denormal (format result-type)

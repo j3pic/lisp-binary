@@ -50,8 +50,22 @@
 	 (format t ">>>>>>>> ~a~%" type)
 	 (assert= (read-binary-type type (cdr (assoc type floats))) calculated-pi))))
 	 
-	 
-    
+(unit-test 'float-denormal-test
+    (let* ((smallest-denormal (lisp-binary/float::make-smallest-denormal :single 'number))
+	   (largest-denormal (lisp-binary/float::make-largest-denormal :single 'number))
+	   (test-value (+ smallest-denormal
+			  (/ (- largest-denormal
+				smallest-denormal)
+			     2)))
+	   (test-buffer (flexi-streams:with-output-to-sequence
+			    (out :element-type '(unsigned-byte 8))
+			  (write-binary-type test-value 'single-float out :byte-order :big-endian))))
+      (assert-equalp test-buffer (buffer 0 #x7f #xff #xff))
+      (assert= (flexi-streams:with-input-from-sequence
+		   (in test-buffer)
+		 (read-binary-type 'single-float in :byte-order :big-endian))
+	       test-value)))
+
 (unit-test 'string-tests
   (let ((ascii-string "The quick brown fox jumps over the lazy dog."))
     (let ((counted-string-buffer (flexi-streams:with-output-to-sequence (out)
