@@ -261,45 +261,6 @@ If they can't be read as bitfields, then a :BIT-STREAM-ID option is added to the
 			 else do (error "Internal error: Unknown command ~S" command)))))))
 	 (t (values field-descriptions :bit-stream-required))))
 
-(defmacro old-make-reader-let-def (f)
-  "Creates a single variable definition to go in the let-def form within READ-BINARY. F is a
-BINARY-FIELD object that describes the field. Captures several local variables within DEFBINARY.
-It's a macro because it became necessary to use it twice."
-  `(let* ((f-name (slot-value ,f 'name))
-	  (f-form
-	   (if (listp f-name)
-	       (slot-value ,f 'read-form)
-	       `(multiple-value-bind (,form-value ,most-recent-byte-count)
-		    ,(slot-value ,f 'read-form)
-		  (cond ((not (numberp ,most-recent-byte-count))
-			 (restart-case
-			     (error (format nil "Evaluation of ~a did not produce a byte count as its second value"
-					    (with-output-to-string (out)
-					      (print ',(slot-value ,f 'read-form) out))))
-			   (use-value (val) :report "Enter an alternate value, dropping whatever was read."
-					:interactive (lambda ()
-						       (format t "Enter a new value for ~a: " ',f-name)
-						       (list (eval (read))))
-					(setf ,form-value val)
-					(setf ,most-recent-byte-count 0))
-								
-			   (enter-size (size) :report "Enter a byte count manually"
-				       :interactive (lambda ()
-						      (format t "Enter the byte count: ")
-						      (force-output)
-						      (list (eval (read))))
-				       (setf ,most-recent-byte-count size))))
-			(t
-			 (incf ,byte-count-name ,most-recent-byte-count)
-			 ,form-value)))))
-	  (x-form (subst* `((,previous-defs-symbol ,(reverse previous-defs)))
-			  f-form)))
-     (if (listp f-name)
-	 (loop for real-name in f-name
-	    do (push (list real-name (list 'inject real-name)) previous-defs))
-	 (push (list f-name (list 'inject f-name)) previous-defs))
-     (list f-name x-form)))
-
 (defparameter *last-f* nil)
 
 (defun %make-reader-let-def (f form-value most-recent-byte-count previous-defs previous-defs-push previous-defs-symbol
