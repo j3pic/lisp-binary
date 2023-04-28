@@ -199,52 +199,53 @@ If SIGNED is non-NIL, the number is interpreted as being in two's complement for
 
 If the STREAM is a BIT-STREAM, then the LENGTH doesn't have to be an integer."
   
-  (multiple-value-bind (bytes bytes-read) (read-bytes length stream)
-    (let ((bytes (if (integerp bytes-read)
-		     bytes
-		     (subseq bytes 0 (1- (length bytes)))))
-	  (partial-byte (unless (integerp bytes-read)
-			  (aref bytes (1- (length bytes)))))
-	  (extra-bits (multiple-value-bind (whole frac) (floor bytes-read)
-			(declare (ignore whole))
-			(* frac 8))))
-      (labels ((add-extra-bits (int)
-		 (if partial-byte
-		     (ecase byte-order
-		       (:big-endian
-			(logior
-			 ;; Note: SBCL 1.4.13.debian claims that both
-			 ;; calls to ASH are unreachable, and prints
-			 ;; the message "deleting unreachable code"
-			 ;; for them. Yet, I have confirmed through
-			 ;; extensive tracing that the code is
-			 ;; indeed executed, and removing it changes
-			 ;; the return value of READ-INTEGER in
-			 ;; the relevant case (where BIT-STREAMs are
-			 ;; involved)
-			 (ash int extra-bits)
-			 partial-byte))
-		       (:little-endian
-			(logior
-			 (ash partial-byte (* (floor length) 8))
-			 int)))
-		     int))		       
-	       (decode-msb* (bytes)
-		 (add-extra-bits
-		  (decode-msb bytes)))
-	       (decode-lsb* (bytes)
-		 (add-extra-bits
-		  (decode-lsb bytes))))
-	(declare (inline add-extra-bits decode-msb* decode-lsb*))
-	(values
-	 (let ((result (case byte-order
-			 ((:big-endian) (decode-msb* bytes))
-			 ((:little-endian) (decode-lsb* bytes))
-			 (otherwise (error "Invalid byte order: ~a" byte-order)))))
-	   (if signed
-	       (unsigned->signed result length :type signed-representation)
-	       result))
-	 bytes-read)))))
+  (catch :ignore-e-o-f
+    (multiple-value-bind (bytes bytes-read) (read-bytes length stream) ;; PM 1
+      (let ((bytes (if (integerp bytes-read)
+                       bytes
+                       (subseq bytes 0 (1- (length bytes)))))
+            (partial-byte (unless (integerp bytes-read)
+                            (aref bytes (1- (length bytes)))))
+            (extra-bits (multiple-value-bind (whole frac) (floor bytes-read)
+                          (declare (ignore whole))
+                          (* frac 8))))
+        (labels ((add-extra-bits (int)
+                   (if partial-byte
+                       (ecase byte-order
+                         (:big-endian
+                          (logior
+                            ;; Note: SBCL 1.4.13.debian claims that both
+                            ;; calls to ASH are unreachable, and prints
+                            ;; the message "deleting unreachable code"
+                            ;; for them. Yet, I have confirmed through
+                            ;; extensive tracing that the code is
+                            ;; indeed executed, and removing it changes
+                            ;; the return value of READ-INTEGER in
+                            ;; the relevant case (where BIT-STREAMs are
+                            ;; involved)
+                            (ash int extra-bits)
+                            partial-byte))
+                         (:little-endian
+                          (logior
+                            (ash partial-byte (* (floor length) 8))
+                            int)))
+                       int))
+                 (decode-msb* (bytes)
+                   (add-extra-bits
+                     (decode-msb bytes)))
+                 (decode-lsb* (bytes)
+                   (add-extra-bits
+                     (decode-lsb bytes))))
+          (declare (inline add-extra-bits decode-msb* decode-lsb*))
+          (values
+            (let ((result (case byte-order
+                            ((:big-endian) (decode-msb* bytes))
+                            ((:little-endian) (decode-lsb* bytes))
+                            (otherwise (error "Invalid byte order: ~a" byte-order)))))
+              (if signed
+                  (unsigned->signed result length :type signed-representation)
+                  result))
+            bytes-read))))))
 
 
 (defun split-bit-field (integer field-bits &optional field-signedness)
