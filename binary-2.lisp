@@ -261,6 +261,16 @@ If they can't be read as bitfields, then a :BIT-STREAM-ID option is added to the
 			 else do (error "Internal error: Unknown command ~S" command)))))))
 	 (t (values field-descriptions :bit-stream-required))))
 
+
+(defun recursive-field-list (current-list parents)
+  "Build a list of fields; grandparents are included
+  as their field lists are inclusive."
+  (append (loop for p in (if (listp parents)
+                             parents
+                             (list parents))
+                nconcing (get p :lisp-binary-fields))
+          current-list))
+
 (defparameter *last-f* nil)
 
 
@@ -384,6 +394,7 @@ STREAM-NAMES."
 				 &key (byte-order :little-endian)
 				 (preserve-*byte-order* t)
 				 align
+				 include
 				 documentation
                                  export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
   "Defines a struct that represents binary data. Also generates two methods for this struct, named
@@ -937,14 +948,16 @@ FLOATING-POINT NUMBERS
 
 "
   (setf defstruct-options
-	(remove-plist-keys defstruct-options :export :byte-order :byte-count-name :align :preserve-*byte-order* :documentation))
+	(remove-plist-keys defstruct-options :export :include :byte-order :byte-count-name :align :preserve-*byte-order* :documentation))
   (let-values* ((stream-symbol (gensym "STREAM-SYMBOL-"))
 		(*ignore-on-write* nil)
 		(bit-stream-groups (make-hash-table))
 		(previous-defs-symbol (gensym "PREVIOUS-DEFS-SYMBOL-"))
 		(most-recent-byte-count (gensym "MOST-RECENT-BYTE-COUNT-"))
 		(form-value (gensym "FORM-VALUE-"))
-		((field-descriptions bit-stream-required) (convert-to-bit-fields field-descriptions))
+		((field-descriptions bit-stream-required) (convert-to-bit-fields
+                                                            (recursive-field-list field-descriptions
+                                                                                  include)))
 		(fields (loop for f in field-descriptions
 			   collect (apply #'expand-defbinary-field
 					  (append f `(:stream-symbol ,stream-symbol :byte-count-name ,byte-count-name
@@ -967,6 +980,8 @@ FLOATING-POINT NUMBERS
     
     (pushover (cons name field-descriptions) *known-defbinary-types*
 	      :key #'car)
+    (setf (get name :lisp-binary-fields)
+          field-descriptions)
     (loop for f in fields do
 	 (awhen (slot-value f 'bit-stream-id)
 	   (push f (gethash it bit-stream-groups nil))))
