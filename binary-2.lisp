@@ -288,7 +288,7 @@ BINARY-FIELD object that describes the field."
 			     (error (format nil "Evaluation of ~a did not produce a byte count as its second value"
 					    (with-output-to-string (out)
 					      (print ',(slot-value f 'read-form) out))))
-			   (enter-value (val) :report "Enter an alternate value, dropping whatever was read."
+			   (use-value (val) :report "Enter an alternate value, dropping whatever was read."
 					:interactive (lambda ()
 						       (format t "Enter a new value for ~a: " ',f-name)
 						       (list (eval (read))))
