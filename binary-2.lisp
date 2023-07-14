@@ -385,6 +385,7 @@ STREAM-NAMES."
 				 &key (byte-order :little-endian)
 				 (preserve-*byte-order* t)
 				 align
+				 untyped-struct
 				 include
 				 documentation
                                  export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
@@ -431,41 +432,44 @@ FIELD-DESCRIPTIONS - A list of slot specifications, having the following structu
 
    The parameters have the following meanings:
    
-   FIELD-NAME    - The name of the slot.
+   FIELD-NAME     - The name of the slot.
    
-   DEFAULT-VALUE - The default value.
+   DEFAULT-VALUE  - The default value.
    
-   TYPE          - The type of the field. Some Common Lisp types such as
-                   (UNSIGNED-BYTE 32) are supported. Any type defined
-                   with DEFBINARY is also supported. For more info, see
-                  'TYPES' below.
+   TYPE           - The type of the field. Some Common Lisp types such as
+                    (UNSIGNED-BYTE 32) are supported. Any type defined
+                    with DEFBINARY is also supported. For more info, see
+                   'TYPES' below.
    
-   BYTE-ORDER    - The byte order to use when reading or writing this
-                   field. Defaults to the BYTE-ORDER given for the whole
-                   struct.
+   BYTE-ORDER     - The byte order to use when reading or writing this
+                    field. Defaults to the BYTE-ORDER given for the whole
+                    struct.
    
-   ALIGN         - If specified, reads and writes will be aligned on this
-                   boundary. When reading, bytes will be thrown away until 
-                   alignment is achieved. When writing, NUL bytes will be
-                   written.
+   ALIGN          - If specified, reads and writes will be aligned on this
+                    boundary. When reading, bytes will be thrown away until 
+                    alignment is achieved. When writing, NUL bytes will be
+                    written.
+
+   UNTYPED-STRUCT - Don't declare the :TYPEs of the fields in the generated
+                    DEFSTRUCT form.
    
-   ELEMENT-ALIGN - If the TYPE is an array, each element of the array will
-                   be aligned to this boundary.
+   ELEMENT-ALIGN  - If the TYPE is an array, each element of the array will
+                    be aligned to this boundary.
    
-   READER        - If speficied, this function will be used to read the field.
-                   It must accept one argument (a stream), and return two
-                   values - The object read, and the the number of bytes read.
-                   The number of bytes read is used for alignment purposes.
+   READER         - If speficied, this function will be used to read the field.
+                    It must accept one argument (a stream), and return two
+                    values - The object read, and the the number of bytes read.
+                    The number of bytes read is used for alignment purposes.
    
-   WRITER        - If specified, this function will be used to write the field.
-                   It must accept two arguments (the object to write, and the
-                   stream), and return the number of bytes written, which is
-                   used for alignment purposes.
+   WRITER         - If specified, this function will be used to write the field.
+                    It must accept two arguments (the object to write, and the
+                    stream), and return the number of bytes written, which is
+                    used for alignment purposes.
    
-   BIND-INDEX-TO - If the EVAL type specifier is used as an array's element type
-                   (see below), BIND-INDEX-TO will be bound to the current index
-                   into the array, in case that matters for determining the type
-                   of the next element.
+   BIND-INDEX-TO  - If the EVAL type specifier is used as an array's element type
+                    (see below), BIND-INDEX-TO will be bound to the current index
+                    into the array, in case that matters for determining the type
+                    of the next element.
 
 
 Example:
@@ -939,7 +943,7 @@ FLOATING-POINT NUMBERS
 
 "
   (setf defstruct-options
-	(remove-plist-keys defstruct-options :export :include :byte-order :byte-count-name :align :preserve-*byte-order* :documentation))
+	(remove-plist-keys defstruct-options :export :include :byte-order :byte-count-name :align :untyped-struct :preserve-*byte-order* :documentation))
   (let-values* ((stream-symbol (gensym "STREAM-SYMBOL-"))
 		(*ignore-on-write* nil)
 		(bit-stream-groups (make-hash-table))
@@ -989,7 +993,10 @@ FLOATING-POINT NUMBERS
 	       if (listp name)
 	       append (bitfield-spec->defstruct-specs
 		       name default-value options)
-	       else collect (list* name default-value :type type (remove-plist-keys options :type :bit-stream-id))))
+	       else collect (list* name default-value
+				   :type (if untyped-struct t
+					     type)
+				   (remove-plist-keys options :type :bit-stream-id))))
 	(defmethod read-binary ((type (eql ',name)) ,(if bit-stream-required
 							 `(,stream-symbol bit-stream)
 							 stream-symbol))
