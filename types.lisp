@@ -498,7 +498,6 @@
 					    (eval `(progn ,@body))))
 				      (multiple-value-bind (type reader writer)
 					  (expand-defbinary-type-field type-info)
-                                        (declare (ignore type))
 					(let ((placeholder (gensym)))
 					  (push (cons placeholder reader) readers)
 					  (push (cons placeholder writer) writers)
