@@ -93,7 +93,7 @@ the NAME is bound to the slot's value."
 			,write-form)
 		     write-form))))
 
-(defun bitfield-spec->defstruct-specs (name default-values options)
+(defun bitfield-spec->defstruct-specs (name default-values options untyped-struct)
   (check-type name list)
   (let ((type (getf options :type)))
     (check-type type list)
@@ -104,7 +104,11 @@ the NAME is bound to the slot's value."
     (loop for real-name in name
 	 for default-value in default-values
        for real-type in type
-       collect `(,real-name ,default-value :type ,real-type ,@(remove-plist-keys options :type)))))
+       collect `(,real-name ,default-value
+			    :type ,(if untyped-struct
+				       t
+				       real-type)
+			    ,@(remove-plist-keys options :type)))))
 
 (defun find-bit-field-groups (list &key (key #'identity))
   "Identifies those fields in the LIST of fields that must be
@@ -992,7 +996,7 @@ FLOATING-POINT NUMBERS
 	       for type = (getf options :type)
 	       if (listp name)
 	       append (bitfield-spec->defstruct-specs
-		       name default-value options)
+		       name default-value options untyped-struct)
 	       else collect (list* name default-value
 				   :type (if untyped-struct t
 					     type)
