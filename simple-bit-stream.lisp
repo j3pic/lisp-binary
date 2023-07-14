@@ -57,7 +57,10 @@ can be discarded if BYTE-ALIGNED-P returns T."))
     (cond
       ((= (slot-value stream 'bits-left) 0)
        (setf (slot-value stream 'last-byte)
-	     (read-byte (slot-value stream 'real-stream)))
+	     (restart-case (read-byte (slot-value stream 'real-stream))
+	       (continue ()
+		 :report "Pretend the read returned a 0 byte."
+		 0)))
        (setf (slot-value stream 'bits-left)
 	     (slot-value stream 'element-bits))
        (read-partial-byte/big-endian bits stream))
@@ -80,7 +83,10 @@ can be discarded if BYTE-ALIGNED-P returns T."))
     (cond
       ((= (slot-value stream 'bits-left) 0)
        (setf (slot-value stream 'last-byte)
-	     (read-byte (slot-value stream 'real-stream)))
+	     (restart-case (read-byte (slot-value stream 'real-stream))
+	       (continue ()
+		 :report "Pretend the read returned a 0 byte."
+		 0)))
        (setf (slot-value stream 'bits-left)
 	     (slot-value stream 'element-bits))
        (read-partial-byte/little-endian bits stream))
@@ -379,7 +385,10 @@ will be. The result is an integer of BITS bits."
   
 #+sbcl
 (defmethod sb-gray:stream-file-position  ((stream bit-stream) &optional position-spec)
-  (when position-spec
+  (cond
+    (position-spec
     (setf (slot-value stream 'bits-left) 0)
-    (setf (slot-value stream 'last-byte) nil))
+     (setf (slot-value stream 'last-byte) nil)
   (file-position (slot-value stream 'real-stream) position-spec))
+    (t
+     (file-position (slot-value stream 'real-stream)))))

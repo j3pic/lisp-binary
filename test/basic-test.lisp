@@ -25,6 +25,14 @@
 	 (or (= ,x* ,y*)
 	     (error "~S != ~S" ,x* ,y*)))))    
 
+  (defmacro assert-eq (x y)
+    (let ((x* (gensym "X"))
+	  (y* (gensym "Y")))
+      `(let ((,x* ,x)
+	     (,y* ,y))
+	 (or (eq ,x* ,y*)
+	     (error "~S is not EQ to ~S" ,x* ,y*)))))
+  
   (defmacro assert-equal (x y)
     (let ((x* (gensym "X"))
 	  (y* (gensym "Y")))
@@ -318,6 +326,38 @@
 					     (*standard-input* *standard-input*)
 					   (read-binary 'implicit-bit-stream
 							*standard-input*)))))))
+
+
+(defbinary example (:untyped-struct t)
+  (a 0 :type (unsigned-byte 24))
+  (b 0 :type (magic :actual-type (unsigned-byte 4)
+		    :value 5))
+  (c 0 :type (unsigned-byte 20)))
+
+
+(unit-test 'untyped-struct-test
+    (flexi-streams:with-input-from-sequence (in '(0 0 0))
+      (handler-bind
+	  (((or end-of-file bad-magic-value)
+	    (lambda (cond)
+	      (declare (ignore cond))
+	      (invoke-restart 'continue))))
+	(let ((obj (read-binary 'example in)))
+	  (assert= (slot-value obj 'a) 0)
+	  (assert= (slot-value obj 'b) 0)
+	  (assert= (slot-value obj 'c) 0)))))
+
+(defbinary example-2 (:include example)
+  (d 0 :type (unsigned-byte 8)))
+
+(unit-test 'include-test
+    (let ((obj (make-example-2 :a #xbedead
+			       :b 4
+			       :c #xbefed
+			       :d #xff)))
+    (test-round-trip ":INCLUDE test"
+	(write-binary obj *standard-output*)
+	(assert-equalp obj (read-binary 'example-2 *standard-input*)))))	     
 
 (defun run-test ()
   (let ((test-results (do-tests)))

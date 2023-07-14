@@ -93,7 +93,7 @@ the NAME is bound to the slot's value."
 			,write-form)
 		     write-form))))
 
-(defun bitfield-spec->defstruct-specs (name default-values options)
+(defun bitfield-spec->defstruct-specs (name default-values options untyped-struct)
   (check-type name list)
   (let ((type (getf options :type)))
     (check-type type list)
@@ -104,7 +104,11 @@ the NAME is bound to the slot's value."
     (loop for real-name in name
 	 for default-value in default-values
        for real-type in type
-       collect `(,real-name ,default-value :type ,real-type ,@(remove-plist-keys options :type)))))
+       collect `(,real-name ,default-value
+			    :type ,(if untyped-struct
+				       t
+				       real-type)
+			    ,@(remove-plist-keys options :type)))))
 
 (defun find-bit-field-groups (list &key (key #'identity))
   "Identifies those fields in the LIST of fields that must be
@@ -261,44 +265,15 @@ If they can't be read as bitfields, then a :BIT-STREAM-ID option is added to the
 			 else do (error "Internal error: Unknown command ~S" command)))))))
 	 (t (values field-descriptions :bit-stream-required))))
 
-(defmacro old-make-reader-let-def (f)
-  "Creates a single variable definition to go in the let-def form within READ-BINARY. F is a
-BINARY-FIELD object that describes the field. Captures several local variables within DEFBINARY.
-It's a macro because it became necessary to use it twice."
-  `(let* ((f-name (slot-value ,f 'name))
-	  (f-form
-	   (if (listp f-name)
-	       (slot-value ,f 'read-form)
-	       `(multiple-value-bind (,form-value ,most-recent-byte-count)
-		    ,(slot-value ,f 'read-form)
-		  (cond ((not (numberp ,most-recent-byte-count))
-			 (restart-case
-			     (error (format nil "Evaluation of ~a did not produce a byte count as its second value"
-					    (with-output-to-string (out)
-					      (print ',(slot-value ,f 'read-form) out))))
-			   (use-value (val) :report "Enter an alternate value, dropping whatever was read."
-					:interactive (lambda ()
-						       (format t "Enter a new value for ~a: " ',f-name)
-						       (list (eval (read))))
-					(setf ,form-value val)
-					(setf ,most-recent-byte-count 0))
-								
-			   (enter-size (size) :report "Enter a byte count manually"
-				       :interactive (lambda ()
-						      (format t "Enter the byte count: ")
-						      (force-output)
-						      (list (eval (read))))
-				       (setf ,most-recent-byte-count size))))
-			(t
-			 (incf ,byte-count-name ,most-recent-byte-count)
-			 ,form-value)))))
-	  (x-form (subst* `((,previous-defs-symbol ,(reverse previous-defs)))
-			  f-form)))
-     (if (listp f-name)
-	 (loop for real-name in f-name
-	    do (push (list real-name (list 'inject real-name)) previous-defs))
-	 (push (list f-name (list 'inject f-name)) previous-defs))
-     (list f-name x-form)))
+
+(defun recursive-field-list (current-list parents)
+  "Build a list of fields; grandparents are included
+  as their field lists are inclusive."
+  (append (loop for p in (if (listp parents)
+                             parents
+                             (list parents))
+                nconcing (get p :lisp-binary-fields))
+          current-list))
 
 (defparameter *last-f* nil)
 
@@ -317,7 +292,7 @@ BINARY-FIELD object that describes the field."
 			     (error (format nil "Evaluation of ~a did not produce a byte count as its second value"
 					    (with-output-to-string (out)
 					      (print ',(slot-value f 'read-form) out))))
-			   (enter-value (val) :report "Enter an alternate value, dropping whatever was read."
+			   (use-value (val) :report "Enter an alternate value, dropping whatever was read."
 					:interactive (lambda ()
 						       (format t "Enter a new value for ~a: " ',f-name)
 						       (list (eval (read))))
@@ -414,6 +389,8 @@ STREAM-NAMES."
 				 &key (byte-order :little-endian)
 				 (preserve-*byte-order* t)
 				 align
+				 untyped-struct
+				 include
 				 documentation
                                  export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
   "Defines a struct that represents binary data. Also generates two methods for this struct, named
@@ -459,41 +436,44 @@ FIELD-DESCRIPTIONS - A list of slot specifications, having the following structu
 
    The parameters have the following meanings:
    
-   FIELD-NAME    - The name of the slot.
+   FIELD-NAME     - The name of the slot.
    
-   DEFAULT-VALUE - The default value.
+   DEFAULT-VALUE  - The default value.
    
-   TYPE          - The type of the field. Some Common Lisp types such as
-                   (UNSIGNED-BYTE 32) are supported. Any type defined
-                   with DEFBINARY is also supported. For more info, see
-                  'TYPES' below.
+   TYPE           - The type of the field. Some Common Lisp types such as
+                    (UNSIGNED-BYTE 32) are supported. Any type defined
+                    with DEFBINARY is also supported. For more info, see
+                   'TYPES' below.
    
-   BYTE-ORDER    - The byte order to use when reading or writing this
-                   field. Defaults to the BYTE-ORDER given for the whole
-                   struct.
+   BYTE-ORDER     - The byte order to use when reading or writing this
+                    field. Defaults to the BYTE-ORDER given for the whole
+                    struct.
    
-   ALIGN         - If specified, reads and writes will be aligned on this
-                   boundary. When reading, bytes will be thrown away until 
-                   alignment is achieved. When writing, NUL bytes will be
-                   written.
+   ALIGN          - If specified, reads and writes will be aligned on this
+                    boundary. When reading, bytes will be thrown away until 
+                    alignment is achieved. When writing, NUL bytes will be
+                    written.
+
+   UNTYPED-STRUCT - Don't declare the :TYPEs of the fields in the generated
+                    DEFSTRUCT form.
    
-   ELEMENT-ALIGN - If the TYPE is an array, each element of the array will
-                   be aligned to this boundary.
+   ELEMENT-ALIGN  - If the TYPE is an array, each element of the array will
+                    be aligned to this boundary.
    
-   READER        - If speficied, this function will be used to read the field.
-                   It must accept one argument (a stream), and return two
-                   values - The object read, and the the number of bytes read.
-                   The number of bytes read is used for alignment purposes.
+   READER         - If speficied, this function will be used to read the field.
+                    It must accept one argument (a stream), and return two
+                    values - The object read, and the the number of bytes read.
+                    The number of bytes read is used for alignment purposes.
    
-   WRITER        - If specified, this function will be used to write the field.
-                   It must accept two arguments (the object to write, and the
-                   stream), and return the number of bytes written, which is
-                   used for alignment purposes.
+   WRITER         - If specified, this function will be used to write the field.
+                    It must accept two arguments (the object to write, and the
+                    stream), and return the number of bytes written, which is
+                    used for alignment purposes.
    
-   BIND-INDEX-TO - If the EVAL type specifier is used as an array's element type
-                   (see below), BIND-INDEX-TO will be bound to the current index
-                   into the array, in case that matters for determining the type
-                   of the next element.
+   BIND-INDEX-TO  - If the EVAL type specifier is used as an array's element type
+                    (see below), BIND-INDEX-TO will be bound to the current index
+                    into the array, in case that matters for determining the type
+                    of the next element.
 
 
 Example:
@@ -967,14 +947,16 @@ FLOATING-POINT NUMBERS
 
 "
   (setf defstruct-options
-	(remove-plist-keys defstruct-options :export :byte-order :byte-count-name :align :preserve-*byte-order* :documentation))
+	(remove-plist-keys defstruct-options :export :include :byte-order :byte-count-name :align :untyped-struct :preserve-*byte-order* :documentation))
   (let-values* ((stream-symbol (gensym "STREAM-SYMBOL-"))
 		(*ignore-on-write* nil)
 		(bit-stream-groups (make-hash-table))
 		(previous-defs-symbol (gensym "PREVIOUS-DEFS-SYMBOL-"))
 		(most-recent-byte-count (gensym "MOST-RECENT-BYTE-COUNT-"))
 		(form-value (gensym "FORM-VALUE-"))
-		((field-descriptions bit-stream-required) (convert-to-bit-fields field-descriptions))
+		((field-descriptions bit-stream-required) (convert-to-bit-fields
+                                                            (recursive-field-list field-descriptions
+                                                                                  include)))
 		(fields (loop for f in field-descriptions
 			   collect (apply #'expand-defbinary-field
 					  (append f `(:stream-symbol ,stream-symbol :byte-count-name ,byte-count-name
@@ -997,6 +979,8 @@ FLOATING-POINT NUMBERS
     
     (pushover (cons name field-descriptions) *known-defbinary-types*
 	      :key #'car)
+    (setf (get name :lisp-binary-fields)
+          field-descriptions)
     (loop for f in fields do
 	 (awhen (slot-value f 'bit-stream-id)
 	   (push f (gethash it bit-stream-groups nil))))
@@ -1012,8 +996,11 @@ FLOATING-POINT NUMBERS
 	       for type = (getf options :type)
 	       if (listp name)
 	       append (bitfield-spec->defstruct-specs
-		       name default-value options)
-	       else collect (list* name default-value :type type (remove-plist-keys options :type :bit-stream-id))))
+		       name default-value options untyped-struct)
+	       else collect (list* name default-value
+				   :type (if untyped-struct t
+					     type)
+				   (remove-plist-keys options :type :bit-stream-id))))
 	(defmethod read-binary ((type (eql ',name)) ,(if bit-stream-required
 							 `(,stream-symbol bit-stream)
 							 stream-symbol))
