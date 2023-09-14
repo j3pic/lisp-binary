@@ -244,7 +244,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defmethod
     #+ccl ccl:stream-read-vector
     #-ccl stream-read-sequence
-    (sequence (stream bit-stream) start end &key &allow-other-keys)
+    (sequence (stream bit-stream) start end #-ccl &key #-ccl &allow-other-keys)
   (%stream-read-sequence stream sequence start end))
 
 #+clisp
