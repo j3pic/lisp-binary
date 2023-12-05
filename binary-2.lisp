@@ -392,7 +392,7 @@ STREAM-NAMES."
 				 untyped-struct
 				 include
 				 documentation
-                                 export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &rest field-descriptions)
+                                 export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &body field-descriptions)
   "Defines a struct that represents binary data. Also generates two methods for this struct, named
 READ-BINARY and WRITE-BINARY, which (de)serialize the struct to or from a stream. The serialization is
 a direct binary representation of the fields of the struct. For instance, if there's a field with a :TYPE of
