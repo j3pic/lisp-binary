@@ -379,9 +379,9 @@ will be. The result is an integer of BITS bits."
 
 #-sbcl
 (defmethod (setf stream-file-position) (position-spec (stream bit-stream))
-  (declare (ignore position-spec))
   (setf (slot-value stream 'bits-left) 0)
-  (setf (slot-value stream 'last-byte) nil))
+  (setf (slot-value stream 'last-byte) nil)
+  (file-position (slot-value stream 'real-stream) position-spec))
   
 #+sbcl
 (defmethod sb-gray:stream-file-position  ((stream bit-stream) &optional position-spec)
