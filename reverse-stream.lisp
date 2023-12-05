@@ -102,14 +102,8 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 			  sequence)))
     (write-sequence reversed stream :start start :end end)))
 
-
-#-sbcl
 (defmethod stream-write-sequence ((stream reverse-stream) sequence start end &key &allow-other-keys)
   (%stream-write-sequence stream sequence (or start 0) (or end (1- (length sequence)))))
-
-#+sbcl
-(defmethod sb-gray:stream-write-sequence ((stream reverse-stream) seq &optional start end)
-  (%stream-write-sequence stream seq (or start 0) (or end (length seq))))
 
 (defun %stream-read-sequence (stream sequence start end)
   (prog1 (read-sequence sequence (slot-value stream 'real-stream) :start start :end end)
@@ -124,21 +118,11 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 				  (slot-value stream 'lookup-table)))))))
 
 
-#-sbcl
 (defmethod stream-read-sequence ((stream reverse-stream) sequence start end &key &allow-other-keys)
   (%stream-read-sequence stream sequence start end))
 
-#+sbcl
-(defmethod sb-gray:stream-read-sequence ((stream reverse-stream) (sequence array) &optional start end)
-  (%stream-read-sequence stream sequence (or start 0) (or end (length sequence))))
-
-
-#-sbcl
 (defmethod stream-file-position ((stream reverse-stream))
   (file-position (slot-value stream 'real-stream)))
 
-#+sbcl
-(defmethod sb-gray:stream-file-position  ((stream reverse-stream) &optional position-spec)
-  (if position-spec
-      (file-position (slot-value stream 'real-stream) position-spec)
-      (file-position (slot-value stream 'real-stream))))
+(defmethod (setf stream-file-position) (position-spec (stream reverse-stream))
+  (file-position (slot-value stream 'real-stream) position-spec))
