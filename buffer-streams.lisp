@@ -24,10 +24,9 @@
 
 ;; TRIVIAL-GRAY-STREAMS seems to be broken on SBCL.
 
-(defmethod #+sbcl sb-gray:stream-write-sequence
-    #-sbcl stream-write-sequence ((stream buffer-stream) sequence #+sbcl &optional start end #-sbcl &key)
+(defmethod stream-write-sequence ((stream buffer-stream) sequence &optional start end)
   (loop for ix from start to (or end (1- (length sequence)))
-       do (write-byte (aref sequence ix) stream)))
+        do (write-byte (aref sequence ix) stream)))
 
 (defmacro with-output-to-buffer ((var &key (element-type ''(unsigned-byte 8))) &body body)
   `(let ((,var (make-buffer-stream ,element-type)))
