@@ -204,23 +204,8 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	      do (write-byte (elt sequence ix) stream))
 	   sequence)))
 
-#-(or sbcl clisp)
-(defmethod stream-write-sequence
-    (sequence (stream bit-stream) start end &key &allow-other-keys)
+(defmethod stream-write-sequence ((stream bit-stream) sequence start end &key &allow-other-keys)
   (%stream-write-sequence stream sequence (or start 0) (or end (1- (length sequence)))))
-
-#+clisp
-(defmethod gray:stream-write-sequence (sequence (stream bit-stream)
-				       &key start end &allow-other-keys)
-    (%stream-write-sequence stream sequence (or start 0) (or end (1- (length sequence)))))  
-
-#+ccl
-(defmethod ccl:stream-write-vector ((stream bit-stream) vector start end)
-  (%stream-write-sequence stream vector (or start 0) (or end (1- (length vector)))))
-
-#+sbcl
-(defmethod sb-gray:stream-write-sequence ((stream bit-stream) seq &optional start end)
-  (%stream-write-sequence stream seq (or start 0) (or end (length seq))))
 
 (defun %stream-read-sequence (stream sequence start end)
   (declare (optimize (speed 0) (debug 3)))
@@ -240,20 +225,8 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	    count t into bytes-read
 	    finally (return bytes-read)))))
 
-#-(or sbcl clisp)
-(defmethod
-    #+ccl ccl:stream-read-vector
-    #-ccl stream-read-sequence
-    (sequence (stream bit-stream) start end #-ccl &key #-ccl &allow-other-keys)
+(defmethod stream-read-sequence ((stream bit-stream) sequence start end &key &allow-other-keys)
   (%stream-read-sequence stream sequence start end))
-
-#+clisp
-(defmethod gray:stream-read-sequence (sequence (stream bit-stream) &key (start 0) (end (length sequence)) &allow-other-keys)
-  (%stream-read-sequence stream sequence start end))
-
-#+sbcl
-(defmethod sb-gray:stream-read-sequence ((stream bit-stream) (sequence array) &optional start end)
-  (%stream-read-sequence stream sequence (or start 0) (or end (length sequence))))
 
 (defmacro read-bytes-with-partial/macro (stream* bits byte-order &key adjustable)
   (alexandria:with-gensyms (whole-bytes remaining-bits element-bits buffer
@@ -371,24 +344,12 @@ will be. The result is an integer of BITS bits."
 	  (decf (slot-value stream 'bits-left)
 		(slot-value stream 'element-bits))))))
 
-#-sbcl
 (defmethod stream-file-position ((stream bit-stream))
   (cond ((slot-value stream 'real-stream)
 	 (file-position (slot-value stream 'real-stream)))
 	(t (error "Not implemented for POSIX/Win32 descriptors."))))
 
-#-sbcl
 (defmethod (setf stream-file-position) (position-spec (stream bit-stream))
   (setf (slot-value stream 'bits-left) 0)
   (setf (slot-value stream 'last-byte) nil)
   (file-position (slot-value stream 'real-stream) position-spec))
-  
-#+sbcl
-(defmethod sb-gray:stream-file-position  ((stream bit-stream) &optional position-spec)
-  (cond
-    (position-spec
-    (setf (slot-value stream 'bits-left) 0)
-     (setf (slot-value stream 'last-byte) nil)
-  (file-position (slot-value stream 'real-stream) position-spec))
-    (t
-     (file-position (slot-value stream 'real-stream)))))
