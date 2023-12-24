@@ -447,7 +447,7 @@
 		     (loop for ,ix from 0 below (length ,name)
 			do (incf ,local-byte-count ,(maybe-bind-index
 						     (maybe-add-align
-						      (subst* `((,name-one (aref ,name ,ix))) write-one) nil))))
+                                                      `(symbol-macrolet ((,name-one (aref ,name ,ix))) ,write-one) nil))))
 		     ,local-byte-count))
 	    (values `(simple-array ,(cadr defstruct-type))
 		    reader* writer*)))))))
