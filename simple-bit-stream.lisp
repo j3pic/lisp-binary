@@ -96,12 +96,11 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	     (decf (slot-value stream 'bits-left) bits)))
       ((< (slot-value stream 'bits-left) bits)
        (let* ((bits-left (slot-value stream 'bits-left))
-	      (remaining-bits (pop-bits/le (slot-value stream 'bits-left)					
-					   (slot-value stream 'last-byte))))
+	      (remaining-bits (pop-bits/le bits-left (slot-value stream 'last-byte))))
 	 (setf (slot-value stream 'bits-left) 0)
 	 (logior
 	  remaining-bits
-	  (ash (read-partial-byte/little-endian (- bits remaining-bits) stream)
+	  (ash (read-partial-byte/little-endian (- bits bits-left) stream)
 	       bits-left))))
       (t (error "BUG: This should never happen!"))))
 
