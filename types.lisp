@@ -264,12 +264,14 @@
 		    
 	    `(let ((,bytes nil))
 	       (values
-		(octets-to-string
-		 (multiple-value-bind (,buffer ,bytes*)
-		     (read-bytes ,length ,stream-symbol)
-		   (setf ,bytes ,bytes*)
-		   ,buffer)
-		 :external-format ,external-format)
+		(string-right-trim
+                 '(,padding-character)
+                 (octets-to-string
+                  (multiple-value-bind (,buffer ,bytes*)
+                      (read-bytes ,length ,stream-symbol)
+                    (setf ,bytes ,bytes*)
+                    ,buffer)
+                  :external-format ,external-format))
 		,bytes)))
 	  `(write-bytes
 	    (make-fixed-length-string ,name ,length ,external-format ,padding-character)
