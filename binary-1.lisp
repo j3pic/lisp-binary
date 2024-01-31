@@ -152,7 +152,8 @@ open in :DIRECTION :OUT"
        t))
 
 (defmacro define-enum (name size/bytes (&key signed (signed-representation :twos-complement)
-					     (byte-order :little-endian) (reader '#'read-integer) (writer '#'write-integer)) &rest values)
+                                          (byte-order :little-endian) (reader '#'read-integer) (writer '#'write-integer))
+                       &body values)
   "Define an enum type. What this does is allow LISP-BINARY to automatically map between
 keywords and integer values that are expected to be found in a binary file. The SIZE is in bytes.
 
