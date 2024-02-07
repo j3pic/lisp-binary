@@ -525,7 +525,7 @@
 
 (define-lisp-binary-type type-info (null-type)
   :where (eq null-type 'null)
-  (values t
+  (values 'null
 	  `(progn (values nil 0))
 	  `(progn 0)))
 
