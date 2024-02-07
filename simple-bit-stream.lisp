@@ -1,5 +1,5 @@
 (defpackage :simple-bit-stream
-  (:use :common-lisp :trivial-gray-streams :lisp-binary/integer)
+  (:use :common-lisp :trivial-gray-streams :lisp-binary/integer :lisp-binary-utils)
   (:export :wrap-in-bit-stream :with-wrapped-in-bit-stream :bit-stream :read-bits
 	   :write-bits :read-bytes-with-partial :byte-aligned-p))
 
@@ -8,7 +8,7 @@
 (defclass bit-stream (fundamental-binary-stream fundamental-input-stream fundamental-output-stream)
   ((element-bits :type fixnum :initform 8 :initarg :element-bits)
    (real-stream :type stream :initarg :real-stream)
-   (last-byte :type (or unsigned-byte null) :initform 0)
+   (last-byte :type unsigned-byte :initform 0)
    (last-op :type symbol :initform nil)
    (bits-left :type integer :initform 0)
    (byte-order :type keyword :initarg :byte-order :initform :little-endian)))
@@ -349,6 +349,15 @@ will be. The result is an integer of BITS bits."
 	(t (error "Not implemented for POSIX/Win32 descriptors."))))
 
 (defmethod (setf stream-file-position) (position-spec (stream bit-stream))
-  (setf (slot-value stream 'bits-left) 0)
-  (setf (slot-value stream 'last-byte) nil)
+  (setf (slot-value stream 'bits-left) 0
+        (slot-value stream 'last-byte) 0)
   (file-position (slot-value stream 'real-stream) position-spec))
+
+(defmethod call-with-file-position ((stream bit-stream) position thunk)
+  (let ((bits-left (slot-value stream 'bits-left))
+        (last-byte (slot-value stream 'last-byte))
+        (last-op (slot-value stream 'last-op)))
+    (unwind-protect (call-next-method)
+      (setf (slot-value stream 'bits-left) bits-left
+            (slot-value stream 'last-byte) last-byte
+            (slot-value stream 'last-op) last-op))))

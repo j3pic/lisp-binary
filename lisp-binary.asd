@@ -26,7 +26,7 @@
    (:file "types" :depends-on ("utils" "binary-1" "binary-2"))
    #+(and lisp-binary-upgrade-asdf
 	  (not lisp-binary/never-use-own-asdf)) (:file "asdf")
-   (:file "simple-bit-stream" :depends-on ("integer"))
+   (:file "simple-bit-stream" :depends-on ("integer" "utils"))
    (:file "reverse-stream" :depends-on ("integer"))
    (:file "integer" :depends-on ("utils"))
    (:file "float" :depends-on ("integer"))

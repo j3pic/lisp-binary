@@ -6,7 +6,7 @@
 	   :no-destructuring-match :recursive-find/collect :plist-replace
 	   :recursive-find-if :recursive-mapcar :letf :relative-file-position :group :let-values* :let-values :divisiblep
 	   :named-let :pushover :insert-before :has-sublist-p :find-sublist :recursive-find-sublist :remove-binding :mapseq
-	   :with-file-position :simple-define-condition))
+	   :call-with-file-position :with-file-position :simple-define-condition))
 
 (in-package :lisp-binary-utils)
 
@@ -448,11 +448,14 @@ Similar to CL-LETF in Emacs."
 			       0)))
     (file-position stream ending-position)))
 
+(defgeneric call-with-file-position (stream position thunk)
+  (:method (stream position thunk)
+    (let ((original-file-position (file-position stream)))
+      (unwind-protect
+           (progn
+             (file-position stream position)
+             (funcall thunk))
+        (file-position stream original-file-position)))))
+
 (defmacro with-file-position ((position stream) &body body)
-  (let ((original-file-position (gensym)))
-    `(let ((,original-file-position (file-position ,stream)))
-       (unwind-protect
-	    (progn
-	      (file-position ,stream ,position)
-	      ,@body)
-	 (file-position ,stream ,original-file-position)))))
+  `(call-with-file-position ,stream ,position (lambda () . ,body)))
