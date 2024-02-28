@@ -244,11 +244,11 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defmethod
     #+ccl ccl:stream-read-vector
     #-ccl stream-read-sequence
-    (sequence (stream bit-stream) start end #-ccl &key #-ccl &allow-other-keys)
+  ((stream bit-stream) sequence start end #-ccl &key #-ccl &allow-other-keys)
   (%stream-read-sequence stream sequence start end))
 
 #+clisp
-(defmethod gray:stream-read-sequence (sequence (stream bit-stream) &key (start 0) (end (length sequence)) &allow-other-keys)
+(defmethod gray:stream-read-sequence ((stream bit-stream) sequence &key (start 0) (end (length sequence)) &allow-other-keys)
   (%stream-read-sequence stream sequence start end))
 
 #+sbcl
