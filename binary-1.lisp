@@ -98,7 +98,7 @@ by TYPE-SIZE")
 			    partial-byte) (floor bytes)
 	(let ((partial-bits (* partial-byte 8)))
 	  (when (> whole-bytes 0)
-	      (write-sequence buffer stream :end (1- whole-bytes)))
+	      (write-sequence buffer stream :end whole-bytes))
 	  (when (> partial-bits 0)
 	    (write-bits (aref buffer (1- (length buffer)))
 			partial-bits stream))
@@ -152,7 +152,8 @@ open in :DIRECTION :OUT"
        t))
 
 (defmacro define-enum (name size/bytes (&key signed (signed-representation :twos-complement)
-					     (byte-order :little-endian) (reader '#'read-integer) (writer '#'write-integer)) &rest values)
+                                          (byte-order :little-endian) (reader '#'read-integer) (writer '#'write-integer))
+                       &body values)
   "Define an enum type. What this does is allow LISP-BINARY to automatically map between
 keywords and integer values that are expected to be found in a binary file. The SIZE is in bytes.
 
@@ -636,12 +637,8 @@ that would normally be bound must be added with a LET form."
 			(stream *standard-input* :type stream)))
 
 (defstruct out-pointer
-  (offset-position 0 :type number)
-  (offset-size/bytes 0 :type number)
-  (offset-byte-order :little-endian :type keyword)
-  (offset-signedness nil :type boolean)
-  (data-to-store nil)
-  (closure #'identity :type function))
+  (pointer-writer #'identity :type function)
+  (data-writer #'identity :type function))
 
 (defvar *queued-pointers* nil)
 
@@ -684,29 +681,19 @@ of WRITE-BINARY that might have the corresponding DUMP-TAG call."
 (defun get-tag (tag)
   (cdr (assoc tag *queued-pointers*)))
 
-(defun queue-write-pointer (tag offset-position offset-size/bytes offset-byte-order offset-signedness data-to-store closure)
-  "Queue some data along with a closure to write it at a later time, and arrange for its address to be written
-to the OFFSET-POSITION at that time."
-  (push-to-tag (make-out-pointer
-		:offset-position offset-position
-		:offset-size/bytes offset-size/bytes
-		:offset-byte-order offset-byte-order
-		:offset-signedness offset-signedness
-		:data-to-store data-to-store
-		:closure closure)
-	       tag))
+(defun queue-write-pointer (tag pointer-writer data-writer)
+  "Queue some data along with the DATA-WRITER to write it at a later time, and arrange for its address to be written
+by the POINTER-WRITER at that time."
+  (push-to-tag (make-out-pointer :pointer-writer pointer-writer :data-writer data-writer) tag))
 
 (defun dump-tag (tag base-pointer stream &optional (previous-result 0))
   (let* ((tag-contents (prog1 (get-tag tag)
 			 (clear-tag tag)))
 	 (bytes-written (loop for out-pointer in tag-contents
-			   for offset = (- (file-position stream) base-pointer)
-			   sum (with-slots (offset-position offset-size/bytes offset-byte-order offset-signedness
-							    data-to-store closure) out-pointer
-				 (with-file-position (offset-position stream)
-				   (write-integer offset offset-size/bytes stream :byte-order offset-byte-order
-						  :signed offset-signedness))
-				 (funcall closure data-to-store stream)))))
+                              for offset = (- (file-position stream) base-pointer)
+                              sum (with-slots (pointer-writer data-writer) out-pointer
+                                    (funcall pointer-writer offset stream)
+                                    (funcall data-writer stream)))))
     (if (get-tag tag)
 	(dump-tag tag base-pointer stream (+ bytes-written previous-result))
 	(+ previous-result bytes-written))))
