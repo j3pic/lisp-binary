@@ -118,9 +118,9 @@
     (funcall read-thunk)))
 					   
 
-(defmacro test-round-trip (test-name read-form write-form &key (out-direction :output))
-  `(call-test-round-trip ,test-name (lambda () ,read-form)
-			 (lambda () ,write-form)
+(defmacro test-round-trip (test-name write-form read-form &key (out-direction :output))
+  `(call-test-round-trip ,test-name (lambda () ,write-form)
+			 (lambda () ,read-form)
 			 :out-direction ,out-direction))
 
 (defun simple-test ()
