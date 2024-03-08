@@ -17,7 +17,7 @@
      do (handler-bind ((no-destructuring-match
 			(lambda (exn)
 			  (declare (ignore exn))
-			  (continue))))
+			  (invoke-restart 'continue-with-next-expander))))
 	  (restart-case
 	      (return (multiple-value-bind (type reader writer)
 			  (apply expander (cons type-info (let ((type (slot-value type-info 'type)))
@@ -33,7 +33,7 @@
 					       ,(slot-value type-info 'name)
 					       ,(slot-value type-info 'stream-symbol))
 				     writer))))
-	    (continue () nil)))
+	    (continue-with-next-expander () nil)))
        finally (error "Unknown LISP-BINARY type: ~s" (slot-value type-info 'type))))
 	  
 (defun defbinary-constructor-name (name defstruct-options)
