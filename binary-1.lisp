@@ -825,6 +825,8 @@ bindings of all the relevant special variables."
        
 
 
+(declaim (inline read-binary-type write-binary-type))
+
 (defun read-binary-type (type stream &key (byte-order :little-endian) align element-align)
   "Read a value of type TYPE from the STREAM. TYPE is any type supported by the DEFBINARY macro."
   (read/write-binary-type :read type stream :byte-order byte-order
@@ -840,7 +842,6 @@ DEFBINARY macro."
 			  :align align :element-align element-align))
 
 
-(declaim (inline read-binary-type write-binary-type))
 
 (defparameter debug-data nil)
 
