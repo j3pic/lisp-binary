@@ -1099,4 +1099,22 @@ FLOATING-POINT NUMBERS
 		       else collect `(export ',f))))
 	',name))))
 
+(defmacro with-event-suite (name &body definitions)
+  "Defines a new event suite scope, which works like a tagged union, together with read/write functions."
+  (when (null definitions) (error (format nil "Message suite ~A has an empty definitions list." name)))
+  (let* ((readf-name (intern (format nil "READ-~A-EVENT" name)))
+         (writef-name (intern (format nil "WRITE-~A-EVENT" name)))
+         (enum-name (intern (format nil "~A-EVENT-IDS" name)))
+         (event-names (mapcar #'cadr definitions))
+         (struct-lookup (make-array (list (length definitions)) :initial-contents event-names)))
+    `(progn
+       (define-enum ,enum-name 2 () ,@event-names)
+       ,@definitions
+       (defun ,readf-name (stream)
+         (let* ((type-id (get-enum-value ',enum-name (read-enum ',enum-name stream))))
+           (read-binary (aref ,struct-lookup type-id) stream)))
+       (defun ,writef-name (object stream)
+         (write-enum ',enum-name (type-of object) stream)
+         (write-binary object stream)))))
+
 
