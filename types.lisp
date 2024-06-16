@@ -228,7 +228,7 @@
 	    `(let ((,bytes nil))
 	       (values
 		(string-right-trim
-                 '(,padding-character)
+                 (list ,padding-character)
                  (octets-to-string
                   (multiple-value-bind (,buffer ,bytes*)
                       (read-bytes ,length ,stream-symbol)
