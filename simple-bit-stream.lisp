@@ -16,6 +16,13 @@
 (defmethod stream-element-type ((stream bit-stream))
   '(unsigned-byte 8))
 
+
+(defun trace-read-byte (stream &optional (eof-error-p t) eof-value)
+  (read-byte stream eof-error-p eof-value))
+
+(defun trace-write-byte (byte stream)
+  (write-byte byte stream))
+
 (defun byte-aligned-p (bit-stream)
   (= (slot-value bit-stream 'bits-left) 0))
 
@@ -57,7 +64,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
     (cond
       ((= (slot-value stream 'bits-left) 0)
        (setf (slot-value stream 'last-byte)
-	     (restart-case (read-byte (slot-value stream 'real-stream))
+	     (restart-case (trace-read-byte (slot-value stream 'real-stream))
 	       (continue ()
 		 :report "Pretend the read returned a 0 byte."
 		 0)))
@@ -83,7 +90,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
     (cond
       ((= (slot-value stream 'bits-left) 0)
        (setf (slot-value stream 'last-byte)
-	     (restart-case (read-byte (slot-value stream 'real-stream))
+	     (restart-case (trace-read-byte (slot-value stream 'real-stream))
 	       (continue ()
 		 :report "Pretend the read returned a 0 byte."
 		 0)))
@@ -107,7 +114,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defmethod stream-finish-output ((stream bit-stream))
   (unless (or (not (eq (slot-value stream 'last-op) :write))
 	      (= (slot-value stream 'bits-left) 0))
-    (write-byte (ecase (slot-value stream 'byte-order)
+    (trace-write-byte (ecase (slot-value stream 'byte-order)
 		  (:little-endian (slot-value stream 'last-byte))
 		  (:big-endian (ash (slot-value stream 'last-byte)
 				    (- 8 (slot-value stream 'bits-left)))))
@@ -125,7 +132,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defmethod stream-read-byte ((stream bit-stream))
   (init-read stream)
   (cond ((= (slot-value stream 'bits-left) 0)
-	 (read-byte (slot-value stream 'real-stream)))
+	 (trace-read-byte (slot-value stream 'real-stream)))
 	((= (slot-value stream 'bits-left)
 	    (slot-value stream 'element-bits))
 	 (prog1
@@ -172,7 +179,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 (defmethod stream-write-byte ((stream bit-stream) integer)
   (init-write stream)
   (cond ((= (slot-value stream 'bits-left) 0)
-	 (write-byte integer (slot-value stream 'real-stream)))
+	 (trace-write-byte integer (slot-value stream 'real-stream)))
 	(t (let ((total-bits-left (+ (slot-value stream 'element-bits)
 				     (slot-value stream 'bits-left))))
 	     (multiple-value-bind (byte-to-write new-last-byte)
@@ -191,7 +198,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 				      (slot-value stream 'last-byte))
 			    (slot-value stream 'last-byte))))
 	       (setf (slot-value stream 'last-byte) new-last-byte)
-	       (write-byte byte-to-write (slot-value stream 'real-stream)))))))
+	       (trace-write-byte byte-to-write (slot-value stream 'real-stream)))))))
 
 (defun %stream-write-sequence (stream sequence start end)
   (unless (>= end start)
@@ -199,8 +206,8 @@ can be discarded if BYTE-ALIGNED-P returns T."))
   (cond ((and (equal (slot-value stream 'bits-left) 0)
 	      (streamp (slot-value stream 'real-stream)))
 	 (write-sequence sequence (slot-value stream 'real-stream) :start start :end end))
-	(t (loop for ix from start to end
-	      do (write-byte (elt sequence ix) stream))
+	(t (loop for ix from start below end
+	      do (trace-write-byte (elt sequence ix) stream))
 	   sequence)))
 
 (defmethod stream-write-sequence ((stream bit-stream) sequence start end &key &allow-other-keys)
@@ -218,7 +225,7 @@ can be discarded if BYTE-ALIGNED-P returns T."))
 	 (loop for ix from start below end
 	    do (setf (elt sequence ix)
 		     (handler-case
-			 (read-byte stream)
+			 (trace-read-byte stream)
 		       (end-of-file ()
 			 (return bytes-read))))
 	    count t into bytes-read
@@ -271,7 +278,7 @@ The byte order is determined from the STREAM object, which must be a SIMPLE-BIT-
   (cond ((< bits (slot-value stream 'element-bits))
 	 (read-partial-byte/big-endian bits stream))
 	((= bits (slot-value stream 'element-bits))
-	 (read-byte stream))
+	 (trace-read-byte stream))
 	(t
 	 (let ((result 0)
 	       (element-bits (slot-value stream 'element-bits)))
@@ -286,7 +293,7 @@ The byte order is determined from the STREAM object, which must be a SIMPLE-BIT-
   (cond ((< bits (slot-value stream 'element-bits))
 	 (read-partial-byte/little-endian bits stream))
 	((= bits (slot-value stream 'element-bits))
-	 (read-byte stream))
+	 (trace-read-byte stream))
 	(t
 	 (let ((result 0)
 	       (element-bits (slot-value stream 'element-bits)))
@@ -323,7 +330,7 @@ will be. The result is an integer of BITS bits."
      (loop while (>= (slot-value stream 'bits-left)
 		     (slot-value stream 'element-bits))
 	do
-	  (write-byte (pop-bits/le (slot-value stream 'element-bits)
+	  (trace-write-byte (pop-bits/le (slot-value stream 'element-bits)
 				   (slot-value stream 'last-byte))
 		      (slot-value stream 'real-stream))
 	  (decf (slot-value stream 'bits-left)
@@ -336,7 +343,7 @@ will be. The result is an integer of BITS bits."
      (loop while (>= (slot-value stream 'bits-left)
 		     (slot-value stream 'element-bits))
 	do
-	  (write-byte (pop-bits (slot-value stream 'element-bits)
+	  (trace-write-byte (pop-bits (slot-value stream 'element-bits)
 				(slot-value stream 'bits-left)
 				(slot-value stream 'last-byte))
 		      (slot-value stream 'real-stream))
