@@ -15,6 +15,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :write-float
 	   
 	   :defbinary
+	   :with-event-suite
 
 	   :*byte-order*
 	   :base-pointer
@@ -1056,3 +1057,4 @@ WITH-SLOTS. These slots are described below:
 	       (apply 
 		(destructuring-lambda ,lambda-list ,@body) ,args)))
 	   *type-expanders*)))
+
