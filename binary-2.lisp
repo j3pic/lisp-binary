@@ -15,7 +15,7 @@
 	   (optimize (safety 3) (debug 3) (speed 0)))
   (loop for expander in *type-expanders*
      do (handler-bind ((no-destructuring-match
-			(lambda (exn)
+			 (lambda (exn)
 			  (declare (ignore exn))
 			  (continue))))
 	  (restart-case

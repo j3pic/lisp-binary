@@ -23,16 +23,25 @@
 
 (defparameter *unit-tests* nil)
 
-(defmacro unit-test (description &body body)
-  `(progn (set-assoc ,description *unit-tests*
+(defmacro unit-test (name &body body)
+  `(progn (set-assoc ,name *unit-tests*
 		(lambda ()
 		  (handler-bind ((condition
 				  (lambda (exn)
 				    (declare (ignorable exn))
 				    (aif (find-restart 'fail-test)
 					 (invoke-restart it)))))
-		    (eval (list* 'let nil ',body)))))
-	  t))
+		    (compile ,name (list 'lambda nil
+					 '(declare (optimize (speed 3) (debug 0)))
+					 (list* 'let nil ',body)))
+		    ;; The test has to be run twice: Once compiled and with full optimization,
+		    ;; to make it the most likely that compiler macros will be used, and the
+		    ;; second time interpreted, to make it unlikely that they'll be used.
+		    ;; This way we test both the compiler macro and the real functions
+		    ;; where compiler macros exist.
+		    (eval (list* 'let nil ',body))
+		    (funcall ,name)
+		    t)))))
 
 (defun do-tests ()
   (sift (lambda (result)

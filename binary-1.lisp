@@ -801,7 +801,7 @@ bindings of all the relevant special variables."
     `(let ((,field-name ,value)
 	   (,stream-name ,stream))
        (declare (ignorable ,field-name ,stream-name))
-       ,read/write-form)))
+       ,read/write-form))) 
 
 (defmacro read/write-binary-type (read-or-write type stream &key value (byte-order :little-endian) align element-align)
   `(alexandria:with-gensyms (stream-name field-name)
@@ -822,8 +822,27 @@ bindings of all the relevant special variables."
 							    (ecase read-or-write
 							      (:read '(inject runtime-reader))
 							      (:write '(inject runtime-writer)))))))))
-       
 
+(defun expand-read/write-binary-type-static (read-or-write type stream
+					 &key value (byte-order :little-endian)
+					   align element-align)
+  (alexandria:with-gensyms (stream-name field-name)
+    (multiple-value-bind (defstruct-type reader-form writer-form)
+	(expand-defbinary-type-field
+	 (make-instance 'defbinary-type
+			:name field-name
+			:type type
+			:byte-order byte-order
+			:stream-symbol stream-name
+			:previous-defs-symbol nil
+			:align align
+			:element-align element-align))
+      (declare (ignore defstruct-type))
+      (expand-read/write-binary-type-body
+       field-name value stream-name stream
+       (ecase read-or-write
+	 (:read reader-form)
+	 (:write writer-form))))))
 
 (declaim (inline read-binary-type write-binary-type))
 
@@ -832,16 +851,37 @@ bindings of all the relevant special variables."
   (read/write-binary-type :read type stream :byte-order byte-order
 			  :align align :element-align element-align))
 
+(define-compiler-macro read-binary-type (&whole form type stream &key (byte-order :little-endian) align element-align)
+  (destructuring-case type 
+    ('type
+     :where (eq quote 'quote)
+     (expand-read/write-binary-type-static
+      :read type stream
+      :byte-order byte-order
+      :align align
+      :element-align element-align))
+     (otherwise form)))
+
 (defun write-binary-type (value type stream &key (byte-order :little-endian) align element-align)
   "Write the VALUE, interpreting it as type TYPE, to the STREAM. The TYPE is any type supported by the
 DEFBINARY macro."
-  (read/write-binary-type :write type stream :byte-order byte-order
+  (read/write-binary-type :write type stream
+			  :byte-order byte-order
 			  :value (if (symbolp value)
 				     (list 'quote value)
 				     value)
 			  :align align :element-align element-align))
 
-
+(define-compiler-macro write-binary-type (&whole form value type stream &key (byte-order :little-endian) align element-align)
+  (destructuring-case type
+    ('type
+     :where (eq quote 'quote)
+     (expand-read/write-binary-type-static
+      :write type stream
+      :value value
+      :byte-order byte-order
+      :align align :element-align element-align))
+    (otherwise form)))
 
 (defparameter debug-data nil)
 
