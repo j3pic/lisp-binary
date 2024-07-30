@@ -17,6 +17,7 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :return-subseq
 	   
 	   :defbinary
+	   :with-event-suite
 
 	   :*byte-order*
 	   :base-pointer
