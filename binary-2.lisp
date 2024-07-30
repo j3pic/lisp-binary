@@ -533,289 +533,31 @@ TYPES
 
     DEFBINARY supports two kinds of types: Ordinary Common Lisp types, and Virtual Types.
 
-    Out of the Common Lisp types, DEFBINARY knows how to read:
+    The list of type names known to the library are listed below. Each one has its own
+    docstring, which can be accessed in several ways:
 
-        (UNSIGNED-BYTE n) and (SIGNED-BYTE n &key (signed-representation :twos-complement), 
-        where N is the number of bits. Since these types are used so frequently in DEFBINARY
-        structs, there is a shorthand for them: You can simply use the number of bits as the
-        type. Positive for unsigned, and negative for signed (two's complement only). Example:
+    1. Emacs/SLIME's built-in docstring integraton: C-d d
+    2. (CL:DOCUMENTATION symbol 'LISP-BINARY:LISP-BINARY-TYPE)
+    3. (DESCRIBE symbol)
 
-            (defbinary foobar ()
-              (x 0 :type 16)  ;; 16-bit unsigned
-              (y 1 :type -16)) ;; 16-bit signed
-
-        If you need to read one's complement, it must be written out:
-
-            (defbinary foobar ()
-              (x 0 :type (signed-byte 16 :signed-representation :ones-complement)))
-
-        float, short-float, half-float, single-float, double-float, quadruple-float,
-        and octuple-float.
-
-           FLOAT and SINGLE-FLOAT are treated as IEEE Single Precision,
-           DOUBLE-FLOAT is treated as IEEE Double Precision, while the others are read
-           in as IEEE Half Precision, Quadruple Precision, etc.
-
-           HALF-FLOAT is stored in memory as a single-float, while floats larger than
-           Double Precision are decoded into RATIONAL numbers to preserve their
-           precision (they are encoded in their proper format on writing).
-
-        (SIMPLE-ARRAY element-type (size))
-
-            Example:
-
-            (defbinary foobar ()
-               (size 0 :type (unsigned-byte 16))
-               (arr #() :type (simple-array (unsigned-byte 8) (size))))
-
-            For the element type, any real or virtual type supported by DEFBINARY is allowed.
-            The SIZE is a Lisp expression that will be evaluated in an environment where all
-            previous members of the struct are bound to their names.
-
-        DEFBINARY will read and write all other CL objects using their READ-BINARY and
-        WRITE-BINARY methods, if defined.
-
-    The virtual types are:
-
-        (COUNTED-ARRAY count-size-in-bytes element-type &key bind-index-to)
-
-            This is a SIMPLE-ARRAY preceded by an integer specifying how many
-            elements are in it. The SIMPLE-ARRAY example above could be rewritten to use
-            a COUNTED-ARRAY instead, like this:
-
-           (defbinary foobar ()
-               (arr #() :type (counted-array 2 (unsigned-byte 8))))
-
-          Obscure fact: The COUNT-SIZE-IN-BYTES does not have to be an integer. It can also be a
-          fraction, which will trigger non-byte-aligned I/O. (example, if the size is 1/2, then the count
-          is 4 bits wide, and the first element begins halfway into the same byte as the count) The
-          ELEMENT-TYPE can also be non-byte-aligned. Doing this can result in needing to use a BIT-STREAM
-          to do I/O with the struct.
-
-          The same obscure fact applies anywhere the library accepts a size in bytes.
-
-        (COUNTED-STRING count-size-in-bytes &key (EXTERNAL-FORMAT :latin1))
-        (COUNTED-BUFFER count-size-in-bytes)
-
-           These are like COUNTED-ARRAYS, but their elements are one byte long. Furthermore, a
-           COUNTED-STRING will be encoded or decoded into a Lisp string according to its EXTERNAL-FORMAT.
-
-           The encoding/decoding is done using the FLEXI-STREAMS library, and valid EXTERNAL-FORMATs are those
-           that are accepted by FLEXI-STREAMS:OCTETS-TO-STRING.
- 
-           Example:
-
-           (defbinary foobar ()
-              (str \"\" :type (counted-string 2 :external-format :utf8)))
-
-        (TERMINATED-STRING termination-length &key (terminator 0) (extenal-format :latin1))
-        (TERMINATED-BUFFER termination-length &key (terminator 0))
-
-            Specifies a C-style terminated string. The TERMINATOR is an integer that will be en/decoded
-            according to the field's BYTE-ORDER. As such, it is capable of being more than one byte long,
-            so it can be used to specify multi-character terminators such as CRLF.
-
-        (FIXED-LENGTH-STRING length &key (external-format :latin1) (padding-character #\Nul))
-
-            Specifies a string of fixed length. When writing, any excess space
-            in the string will be padded with the PADDING-CHARACTER. The LENGTH is the
-            number of bytes desired after encoding.
-
-            If the input string is longer than the provided LENGTH, a condition of type
-            LISP-BINARY:INPUT-STRING-TOO-LONG will be raised. Invoke the restart CL:TRUNCATE
-            to trim enough excess characters from the string to make it equal to the LENGTH.
-
-        (MAGIC &key actual-type value)
-
-            Specifies that a magic value will be read and written. The value will be
-            read as type ACTUAL-TYPE.
-
-            If the value read is not CL:EQUAL to the VALUE given, then a condition of type
-            BAD-MAGIC-VALUE will be raised.
-
-            A BAD-MAGIC-VALUE object contains the slots BAD-VALUE and REQUIRED-VALUE.
-
-            The error can be ignored by invoking the CL:CONTINUE restart. 
-
+        UNSIGNED-BYTE
+        SIGNED-BYTE
+        SIMPLE-ARRAY
+        COUNTED-ARRAY
+        COUNTED-STRING
+        COUNTED-BUFFER
+        TERMINATED-STRING
+        TERMINATED-BUFFER
+        FIXED-LENGTH-STRING
+        MAGIC
         BASE-POINTER
-
-            Instead of reading or writing this field, CL:FILE-POSITION will be called
-            on the current stream, and the address returned will be stored under a tag
-            with the same name as this slot. The tag can then be used to calculate
-            file positions and offsets. See the POINTER type for an example.
-
         FILE-POSITION
-
-            Like BASE-POINTER, but no global tag is stored. The slot will contain the
-            address in the file of the next thing to be read. No actual reading or
-            writing is triggered by a slot of this type.
-        
         (REGION-TAG &key base-pointer-name)
-
-            Instead of writing the value of this slot, all POINTERs that have the same
-            REGION-TAG name as this slot will be written out here, and the corresponding
-            offsets will be updated. The file being written must be opened with
-            :DIRECTION :IO. The POINTERs themselves will be written as offsets from
-            whatever object has the BASE-POINTER named BASE-POINTER-NAME.
-
         (POINTER &key pointer-type data-type base-pointer-name region-tag)
-
-            Specifies that the value is really a pointer to another value somewhere else
-            in the file. When reading, if a BASE-POINTER-NAME is supplied and a base-pointer
-            tag has been created, then the pointer will be treated as an offset from that
-            base-pointer. If no BASE-POINTER-NAME is provided, then the pointer is treated
-            as being an absolute file-position.
-
-            The :POINTER-TYPE key specifies the type of the pointer itself, and must be some kind
-            of integer.
-
-            The :DATA-TYPE specifies the data that is being pointed to.
-
-            The :REGION-TAG is used when writing. When WRITE-BINARY writes this field, what
-            it really does is just write a zero pointer (since the object being pointed to
-            proably occurs later in the file, so we don't know what the address is going to
-            be yet). Then WRITE-BINARY stores the address OF THE POINTER, along with a
-            serialized representation  of the data to be written.  
-
-            When any WRITE-BINARY method gets to a REGION-TAG field, it writes out all the data
-            that has been stored under that tag's name, and goes back to update the pointers.
-
-            POINTERs cannot be automatically written if they point to an earlier part of the file
-            than they themselves occur (no backwards-pointing pointers).
-
-            Because it must go back and change what it has previously written, the stream must
-            be opened with :DIRECTION :IO.
-
-            All I/O involving POINTERs, REGION-TAGs, or BASE-POINTERs should be performed
-            within a WITH-LOCAL-POINTER-RESOLVING-CONTEXT block.
-
-            Example:
-
-               (defbinary bar ()
-                 (pointer-1 nil :type (pointer :pointer-type (unsigned-byte 16)
-                                               :data-type  (terminated-string 1)
-                                               :base-pointer-name foo-base
-                                               :region-tag foo-region))
-                 (pointer-2 0   :type (pointer :pointer-type (unsigned-byte 16)
-                                               :data-type quadruple-float
-                                               :base-pointer-name foo-base
-                                               :region-tag foo-region)))
- 
-
-               (defbinary foo ()
-                 (foo-base 0 :type base-pointer)
-                 (bar nil :type bar)
-                 ;; POINTER-1 and POINTER-2 will point to this:
-                 (foo-region nil :type (region-tag :base-pointer-name foo-base)))
-                                                    
-
-               (with-local-pointer-resolving-context
-                   (let ((input (with-open-binary-file (in \"foo.bin\")
-                                   (read-binary 'foo in))))
-                      (with-open-binary-file (out \"bar.bin\"
-                                              :direction :io)
-                          (write-binary input stream))))
-
         (BIT-FIELD &key raw-type member-types)
-
-            Specifies that multiple values are to be OR'd into a single integer for serialization
-            purposes. The name of a slot of this type must be specified as a list of names,
-            one for each value in the bit field. :RAW-TYPE specifies the type of the single integer
-            into which everything is being stored, and must meet the following requirements:
-
-              1. Be of the form (UNSIGNED-BYTE n)
-              2. Where N is divisible by 8.
-
-            The :MEMBER-TYPES is an unevaluated list of types that must consist entirely of
-            (UNSIGNED-BYTE b) or (SIGNED-BYTE b) types. The Bs must add up to N above.
-
-            READ-BINARY will automatically separate the values in the bit field into their
-            slots, and WRITE-BINARY will automatically OR them back together.
-           
-            The default value you specify for this field should be given as a list
-            of default values for each of the subfields.
-
         (CUSTOM &key reader writer (lisp-type t))
-
-            Specifies a slot of type LISP-TYPE that will be read by the provided
-            READER function and written with the provided WRITER function
-
-            The READER function must accept the lambda-list (STREAM), and its
-            argument will be the stream currently being read.
-
-            The WRITER function must accept the lambda-list (OBJECT STREAM), and
-            it is generally expected to write the OBJECT to the STREAM.
-
-            If these functions are specified as LAMBDA forms, then they will
-            be closures. The READER can expect every field that has been read
-            so far to be bound to their names, while the WRITER can expect
-            to be able to see all the slots in the struct being written.
-
-            Both functions are optional.
-
         NULL
-
-            Reading and writing will be a no-op. The value of a field of type NULL will always read
-            as NIL and be ignored when writing.
-
-RUNTIME TYPE DETERMINATION 
-
-    (EVAL unquoted-type-expression)
-
-    The EVAL type specifier causes the type to be computed at runtime. The UNQUOTED-TYPE-EXPRESSION will be
-    evaluated just before attempting to read the field of this type in an environment where all the
-    previously-defined fields are bound to their names.
-
-    Example:
-
-        (defbinary foobar ()
-           (type-tag 0 :type (unsigned-byte 32))
-           (data nil :type (eval (case type-tag
-                                       (1 '(unsigned-byte 16))
-                                       (2 '(counted-string 1 :external-format :utf-8))))))
-
-   In the above example, READ-BINARY will first read the TYPE-TAG as an (UNSIGNED-BYTE 32),
-   then it will evaluate the CASE expression in order to get the type of the DATA. Then it
-   will generate a reader and a writer the same way DEFBINARY normally does, except at runtime
-   instead of compile time.
-
-   The CASE expression is not actually evaluated with a runtime call to EVAL. Instead, it is
-   embedded directly in the source code of the generated READ-BINARY and WRITE-BINARY methods.
-
-   The reader/writer code derived from the resulting type expression, however, *is* evaluated with
-   a runtime call to EVAL, and the part of the macroexpander that handles type fields gets called
-   at runtime as well.
-
-   If the UNQUOTED-TYPE-EXPRESSION evaluates to another EVAL type specifier, then that specifier
-   will be expanded once again. 
-
-DEFINING STRINGS
-
-    :EXTERNAL-FORMAT is any value accepted by flexi-streams:octets-to-string, such as :latin1 or :utf8.
-
-    String count and terminated-buffer terminator lengths are given in BYTES, unlike the
-    Common Lisp type '(unsigned-byte n)' in which the length is given in bits.
-
-    The types COUNTED-STRING and COUNTED-BUFFER are virtual types. When encountered, DEFBINARY will
-    generate code that deals with counted strings and buffers, which are blocks of data that begin
-    with a size. The number passed with this type is the size of the count. The difference between the
-    two is that one of them is converted to and from a STRING while the other retains its raw binary
-    representation and will be a SIMPLE-ARRAY of (UNSIGNED-BYTE 8).
-
-    (TERMINATED-STRING terminator-size) and (TERMINATED-BUFFER terminator-size) are for blocks of data that end with a
-    terminator of some kind. The terminator is not produced as part of the buffer. The terminator-size defaults to 1.
-
-    All generated buffers and strings are guaranteed to have the type SIMPLE-ARRAY.
-
-ARRAYS OF COMPLEX TYPES
-
-    In the (SIMPLE-ARRAY element-type length) type specifier, the LENGTH is evaluated when the array is being read.
-    Previously defined fields will be bound. The ELEMENT-TYPE can be any type supported by DEFBINARY, including
-    the EVAL type specifier and the COUNTED-STRING, COUNTED-BUFFER, TERMINATED-STRING, and TERMINATED-BUFFER virtual
-    types. Notably, ELEMENT-TYPE can be other types that were previously defined with DEFBINARY.
-
-    There is also the type (COUNTED-ARRAY count-size element-type), which functions like COUNTED-STRING or COUNTED-BUFFER,
-    except that each element of the array can be a complex type.
+        EVAL - For runtime type selection
 
 NON-BYTE-ALIGNED I/O: AN ALTERNATIVE TO BIT FIELDS
 

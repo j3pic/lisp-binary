@@ -11,6 +11,25 @@
 
 (define-lisp-binary-type type-info (type &key reader writer (lisp-type t))
   :where (eq type 'custom)
+  (documentation
+   (custom
+    "(CUSTOM &key reader writer (lisp-type t))
+
+Specifies a slot of type LISP-TYPE that will be read by the provided
+READER function and written with the provided WRITER function
+
+The READER function must accept the lambda-list (STREAM), and its
+argument will be the stream currently being read.
+
+The WRITER function must accept the lambda-list (OBJECT STREAM), and
+it is generally expected to write the OBJECT to the STREAM.
+
+If these functions are specified as LAMBDA forms, then they will
+be closures. The READER can expect every field that has been read
+so far to be bound to their names, while the WRITER can expect
+to be able to see all the slots in the struct being written.
+
+Both functions are optional."))
   (values lisp-type
 	  (if reader
 	      `(funcall ,reader ,stream-symbol)
@@ -21,6 +40,34 @@
 
 (define-lisp-binary-type type-info (type &key raw-type member-types)
   :where (eq type 'bit-field)
+  (documentation
+   (bit-field
+    "(BIT-FIELD &key raw-type member-types)
+
+NOTE: Direct use of this type by programs is deprecated. Instead,
+just declare clusters of fields with (UNSIGNED-BYTE n) or (SIGNED-BYTE n)
+without worrying if n is a whole number of bytes. The DEFBINARY macro
+will combine them into BIT-FIELD fields as long as there is a combination of
+fields that add up to a whole number of bytes. 
+
+Specifies that multiple values are to be OR'd into a single integer for serialization
+purposes. The name of a slot of this type must be specified as a list of names,
+one for each value in the bit field. :RAW-TYPE specifies the type of the single integer
+into which everything is being stored, and must meet the following requirements:
+
+1. Be of the form (UNSIGNED-BYTE n)
+2. Where N is divisible by 8.
+
+The :MEMBER-TYPES is an unevaluated list of types that must consist entirely of
+(UNSIGNED-BYTE b) or (SIGNED-BYTE b) types. The Bs must add up to N above.
+
+READ-BINARY will automatically separate the values in the bit field into their
+slots, and WRITE-BINARY will automatically OR them back together.
+
+The default value you specify for this field should be given as a list
+of default values for each of the subfields."))
+
+
   (let ((reader* nil)
 	(writer* nil))
     (letf (((slot-value type-info 'type) raw-type))
@@ -108,6 +155,11 @@
 
 (define-lisp-binary-type type-info (type)
   :where (eq type 'base-pointer)
+  (documentation
+   (base-pointer "Instead of reading or writing this field, CL:FILE-POSITION will be called
+on the current stream, and the address returned will be stored under a tag
+with the same name as this slot. The tag can then be used to calculate
+file positions and offsets. See the POINTER type for an example."))
   (values t
 	  `(let ((file-position (file-position ,stream-symbol)))
 	     (add-base-pointer-tag ',name file-position)
@@ -119,6 +171,13 @@
 
 (define-lisp-binary-type type-info (type)
   :where (eq type 'file-position)
+  (documentation
+   (file-position "FILE-POSITION
+
+Like BASE-POINTER, but no global tag is stored. The slot will contain the
+address in the file of the next thing to be read. No actual reading or
+writing is triggered by a slot of this type.
+"))
   (values 'integer
 	  `(values (file-position ,stream-symbol)
 		   0)
@@ -127,6 +186,14 @@
 
 (define-lisp-binary-type type-info (type &key base-pointer-name)
   :where (eq type 'region-tag)
+  (documentation
+   (region-tag "(REGION-TAG &key base-pointer-name)
+
+Instead of writing the value of this slot, all POINTERs that have the same
+REGION-TAG name as this slot will be written out here, and the corresponding
+offsets will be updated. The file being written must be opened with
+:DIRECTION :IO. The POINTERs themselves will be written as offsets from
+whatever object has the BASE-POINTER named BASE-POINTER-NAME."))
   (push name *ignore-on-write*)
   (values t
 	  `(values nil 0)
@@ -137,6 +204,65 @@
 
 (define-lisp-binary-type type-info (type &key pointer-type data-type base-pointer-name region-tag validator)
   :where (eq type 'pointer)
+  (documentation
+   (pointer "(POINTER &key pointer-type data-type base-pointer-name region-tag)
+
+Specifies that the value is really a pointer to another value somewhere else
+in the file. When reading, if a BASE-POINTER-NAME is supplied and a base-pointer
+tag has been created, then the pointer will be treated as an offset from that
+base-pointer. If no BASE-POINTER-NAME is provided, then the pointer is treated
+as being an absolute file-position.
+
+The :POINTER-TYPE key specifies the type of the pointer itself, and must be some kind
+of integer.
+
+The :DATA-TYPE specifies the data that is being pointed to.
+
+The :REGION-TAG is used when writing. When WRITE-BINARY writes this field, what
+it really does is just write a zero pointer (since the object being pointed to
+proably occurs later in the file, so we don't know what the address is going to
+be yet). Then WRITE-BINARY stores the address OF THE POINTER, along with a
+serialized representation  of the data to be written.  
+
+When any WRITE-BINARY method gets to a REGION-TAG field, it writes out all the data
+that has been stored under that tag's name, and goes back to update the pointers.
+
+POINTERs cannot be automatically written if they point to an earlier part of the file
+than they themselves occur (no backwards-pointing pointers).
+
+Because it must go back and change what it has previously written, the stream must
+be opened with :DIRECTION :IO.
+
+All I/O involving POINTERs, REGION-TAGs, or BASE-POINTERs should be performed
+within a WITH-LOCAL-POINTER-RESOLVING-CONTEXT block.
+
+Example:
+
+    (defbinary bar ()
+      (pointer-1 nil :type (pointer :pointer-type (unsigned-byte 16)
+    				:data-type  (terminated-string 1)
+    				:base-pointer-name foo-base
+    				:region-tag foo-region))
+      (pointer-2 0   :type (pointer :pointer-type (unsigned-byte 16)
+    				:data-type quadruple-float
+    				:base-pointer-name foo-base
+    				:region-tag foo-region)))
+    
+    
+    (defbinary foo ()
+      (foo-base 0 :type base-pointer)
+      (bar nil :type bar)
+      ;; POINTER-1 and POINTER-2 will point to this:
+      (foo-region nil :type (region-tag :base-pointer-name foo-base)))
+    
+    
+    (with-local-pointer-resolving-context
+     (let ((input (with-open-binary-file (in \"foo.bin\")
+    				     (read-binary 'foo in))))
+       (with-open-binary-file (out \"bar.bin\"
+    			       :direction :io)
+    			  (write-binary input stream))))
+"))
   (block nil
     (letf (((slot-value type-info 'type) pointer-type))
       (multiple-value-bind (pointer-defstruct-type pointer-reader pointer-writer)
@@ -185,6 +311,18 @@
 
 (define-lisp-binary-type type-info (type &key (actual-type '(unsigned-byte 16)) (value 0))
   :where (eq type 'magic)
+  (documentation
+   (magic "(MAGIC &key actual-type value)
+
+Specifies that a magic value will be read and written. The value will be
+read as type ACTUAL-TYPE.
+
+If the value read is not CL:EQUAL to the VALUE given, then a condition of type
+BAD-MAGIC-VALUE will be raised.
+
+A BAD-MAGIC-VALUE object contains the slots BAD-VALUE and REQUIRED-VALUE.
+
+The error can be ignored by invoking the CL:CONTINUE restart."))
   (if (and (listp actual-type)
 	   (eq (car actual-type) 'quote))
       (restart-case
@@ -220,6 +358,17 @@
 
 (define-lisp-binary-type type-info (type length &key (external-format :latin1) (padding-character #\Nul))
   :where (member type '(fixed-length-string fixed-string))
+  (documentation
+   ((fixed-length-string fixed-string)
+    "(FIXED-LENGTH-STRING length &key (external-format :latin1) (padding-character #\Nul))
+
+Specifies a string of fixed length. When writing, any excess space
+in the string will be padded with the PADDING-CHARACTER. The LENGTH is the
+number of bytes desired after encoding.
+
+If the input string is longer than the provided LENGTH, a condition of type
+LISP-BINARY:INPUT-STRING-TOO-LONG will be raised. Invoke the restart CL:TRUNCATE
+to trim enough excess characters from the string to make it equal to the LENGTH."))
   (values 'string
 	  (let ((bytes (gensym "BYTES-"))
 		(bytes* (gensym "BYTES*-"))
@@ -242,6 +391,21 @@
 
 (define-lisp-binary-type type-info (type count-size &key (external-format :latin1))
   :where (member type '(counted-string counted-buffer))
+  (documentation
+   ((counted-string counted-buffer)
+    "(COUNTED-STRING count-size-in-bytes &key (EXTERNAL-FORMAT :latin1))
+(COUNTED-BUFFER count-size-in-bytes)
+
+These are like COUNTED-ARRAYS, but their elements are one byte long. Furthermore, a
+COUNTED-STRING will be encoded or decoded into a Lisp string according to its EXTERNAL-FORMAT.
+
+The encoding/decoding is done using the FLEXI-STREAMS library, and valid EXTERNAL-FORMATs are those
+that are accepted by FLEXI-STREAMS:OCTETS-TO-STRING.
+
+Example:
+
+    (defbinary foobar ()
+      (str \"\" :type (counted-string 2 :external-format :utf8)))"))
   (values (ecase type
 	    ((counted-string) 'string)
 	    ((counted-buffer) '(simple-array (unsigned-byte 8))))
@@ -264,6 +428,24 @@
 
 (define-lisp-binary-type type-info (counted-array count-size element-type &key bind-index-to)
   :where (eq counted-array 'counted-array)
+  (documentation
+   (counted-array
+    "(COUNTED-ARRAY count-size-in-bytes element-type &key bind-index-to)
+
+This is a SIMPLE-ARRAY preceded by an integer specifying how many
+elements are in it.
+
+Example:
+
+    (read-binary-type '(counted-array 2 (unsigned-byte 8)) stream)
+
+The COUNT-SIZE-IN-BYTES does not have to be an integer. It can also be a
+fraction, which will trigger non-byte-aligned I/O. (example, if the size is 1/2, then the count
+is 4 bits wide, and the first element begins halfway into the same byte as the count) The
+ELEMENT-TYPE can also be non-byte-aligned. Such a type can only be read from or written
+to a BIT-STREAM.
+
+See also: WITH-WRAPPED-IN-BIT-STREAM"))
   (let ((count-size* (gensym "COUNT-SIZE-"))
 	(reader-value  (gensym "READER-VALUE-"))
 	(reader-byte-count (gensym "READER-BYTE-COUNT-")))
@@ -284,6 +466,21 @@
 
 (define-lisp-binary-type type-info (simple-array type lengths &key bind-index-to)
   :where (member simple-array '(simple-array))
+  (documentation
+   (simple-array "(SIMPLE-ARRAY element-type (size))
+
+Example:
+
+    (defbinary foobar ()
+      (size 0 :type (unsigned-byte 16))
+      (arr #() :type (simple-array (unsigned-byte 8) (size))))
+
+For the element type, any real or virtual type supported by DEFBINARY is allowed.
+The SIZE is a Lisp expression that will be evaluated in an environment where all
+previous members of the struct are bound to their names.
+
+DEFBINARY will read and write all other CL objects using their READ-BINARY and
+WRITE-BINARY methods, if defined."))
   (let ((array-count-size nil)
 	(reader* nil)
 	(writer* nil))
@@ -419,6 +616,55 @@
 
 (define-lisp-binary-type type-info (type-name type-generating-form)
   :where (eq type-name 'eval)
+  (documentation
+   (eval "(EVAL unquoted-type-expression)
+
+The EVAL type specifier causes the type to be computed at runtime. The
+UNQUOTED-TYPE-EXPRESSION will be evaluated just before attempting to read
+the field of this type in an environment where all the previously-defined
+fields are bound to their names.
+
+Example:
+
+    (defbinary foobar ()
+      (type-tag 0 :type (unsigned-byte 32))
+      (data nil :type (eval
+		       (case type-tag
+			 (1 '(unsigned-byte 16))
+			 (2 '(counted-string 1 :external-format :utf-8))))))
+
+In the above example, READ-BINARY will first read the TYPE-TAG as an
+(UNSIGNED-BYTE 32), then it will evaluate the CASE expression in order to
+get the type of the DATA. Then, because of a special optimization that has
+been applied to this type when a CASE form is presented to it, the bodies
+of the cases are evaluated at macro-expansion time, and their values
+used to generate the code to read and write the corresponding types. A
+similar case form is compiled into the READ-BINARY and WRITE-BINARY
+methods, with the types being replaced by reader or writer code. If this
+mechanism fails, a fallback mechanism, described below, is used.
+
+The following forms support this optimization:
+
+   case ecase typecase etypecase cond
+
+If any other form is provided, then the EVAL expander resorts to its
+default behavior, which is to pass whatever type is produced by the form
+to an internal function in order to generate the code that will be used
+to perform the reading or writing, and then to EVAL the resulting form.
+
+The same thing happens if any of the bodies of the cases signals a
+condition at macro expansion time, which could be an indication that
+the case bodies require information that is only available at runtime.
+
+The CASE expression is not actually evaluated with a runtime call
+to EVAL. Instead, it is embedded directly in the source code of the
+generated READ-BINARY and WRITE-BINARY methods.
+
+If the UNQUOTED-TYPE-EXPRESSION evaluates to another EVAL type specifier,
+then that specifier will be expanded once again. The EVAL expander
+tries to be as smart as possible to avoid actually calling EVAL at
+runtime, but sometimes it's unavoidable.
+"))
   (let ((case-template nil)
 	(readers nil)
 	(writers nil))
@@ -454,7 +700,7 @@
     
     (setf case-template
 	  (block make-case-template
-	    (if (member (car type-generating-form) '(case ecase typecase etypecase))
+	    (if (member (car type-generating-form) '(case ecase typecase etypecase cond))
 		`(,(first type-generating-form)
 		   ,(second type-generating-form)
 		   ,@(loop for (case . body) in (cddr type-generating-form)
@@ -492,6 +738,23 @@
 
 (define-lisp-binary-type type-info (byte-type bits &key (signed-representation :twos-complement))
   :where (member byte-type '(unsigned-byte signed-byte))
+  (documentation
+   ((unsigned-byte signed-byte)
+    "(UNSIGNED-BYTE n) and (SIGNED-BYTE n &key (signed-representation :twos-complement), 
+where N is the number of bits. Since these types are used so frequently in DEFBINARY
+structs, there is a shorthand for them: You can simply use the number of bits as the
+type. Positive for unsigned, and negative for signed (two's complement only).
+
+Example:
+
+    (defbinary foobar ()
+      (x 0 :type 16)  ;; 16-bit unsigned
+      (y 1 :type -16)) ;; 16-bit signed
+
+If you need to read one's complement, it must be written out:
+
+    (defbinary foobar ()
+      (x 0 :type (signed-byte 16 :signed-representation :ones-complement)))"))
   (values `(,byte-type ,bits)
 	  `(read-integer ,(/ bits 8) ,stream-symbol
 			 :byte-order ,byte-order
@@ -505,6 +768,17 @@
 (define-lisp-binary-type type-info (float-type &key (byte-order byte-order))
   :where (member float-type '(float single-float half-float double-float quadruple-float quad-float
 			      octuple-float octo-float))
+  (documentation
+   ((float single-float)
+    "IEEE Single Precision")
+   (double-float "IEEE Double Precision")
+   (half-float "Read and written as IEEE half-precision, stored in memory as single-precision")
+   ((quadruple-float quad-float)
+    "Read and written as IEEE quadruple precision, stored in memory as CL:RATIONAL
+to avoid loss of prcision.")
+   ((octuple-float octo-float)
+    "Read and written as IEEE octuple precision, stored in memory as CL:RATIONAL
+to avoid loss of precision."))
   (let ((float-format (case float-type
 			(half-float :half)
 			((float single-float) :single)
@@ -526,12 +800,23 @@
 
 (define-lisp-binary-type type-info (null-type)
   :where (eq null-type 'null)
+  (documentation
+   (null "Reading and writing will be a no-op. The value of a field of type NULL will always read
+as NIL and be ignored when writing."))
   (values 'null
 	  `(progn (values nil 0))
 	  `(progn 0)))
 
 (define-lisp-binary-type type-info (type termination-length &key (external-format :latin1) (terminator 0))
   :where (member type '(terminated-string terminated-buffer))
+  (documentation
+   ((terminated-string terminated-buffer)
+    "(TERMINATED-STRING termination-length &key (terminator 0) (extenal-format :latin1))
+(TERMINATED-BUFFER termination-length &key (terminator 0))
+
+Specifies a C-style terminated string. The TERMINATOR is an integer that will be en/decoded
+according to the field's BYTE-ORDER. As such, it is capable of being more than one byte long,
+so it can be used to specify multi-character terminators such as CRLF."))
   (let ((real-terminator `(ecase ,byte-order
 			    ((:little-endian) (encode-lsb (or ,terminator 0) ,termination-length))
 			    ((:big-endian) (encode-msb (or ,terminator 0) ,termination-length)))))

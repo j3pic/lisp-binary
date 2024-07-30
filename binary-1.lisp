@@ -13,12 +13,15 @@ reading and writing integers and floating-point numbers. Also provides a bit-str
 	   :write-bits
 	   :read-float
 	   :write-float
+
+	   :return-subseq
 	   
 	   :defbinary
 
 	   :*byte-order*
 	   :base-pointer
 	   :region-tag
+	   :lisp-binary-type
 	   :pointer
 	   :with-local-pointer-resolving-context
 	   :custom
@@ -188,8 +191,11 @@ WRITER returns bytes-written).
        (setf (gethash ',name *enum-definitions*) definition)
        (deftype ,name () 'symbol))))
 
-(simple-define-condition bad-enum-value (simple-error) (integer-value symbol-value enum-name))
-(simple-define-condition bad-magic-value (simple-error) (bad-value required-value))
+(simple-define-condition bad-enum-value (simple-error) (integer-value symbol-value enum-name)
+			 "Signalled by READ-ENUM when the value that was read is not a defined
+member of the enum.")
+(simple-define-condition bad-magic-value (simple-error) (bad-value required-value)
+			 "Signalled when a magic number is read that doesn't match its defined value.")
 
 (defun get-enum-value (enum symbol)
   (let ((definition (if (enum-definition-p enum)
@@ -211,7 +217,9 @@ WRITER returns bytes-written).
 		  :format-control "Value ~a is not a value in enum ~a"
 		  :format-arguments (list value (slot-value definition 'name))))))
 
-(defparameter *byte-order* :little-endian)
+(defparameter *byte-order* :little-endian
+  "Dynamically controls the byte-order in which Lisp-Binary's primitives read multi-byte values.
+Allowed values are :LITTLE-ENDIAN and :BIG-ENDIAN.")
 
 (defun write-enum (enum symbol stream)
   (let ((enum-def (if (enum-definition-p enum)
@@ -1007,6 +1015,37 @@ returns the number of bytes that were written.
 (defvar *type-info-objects* nil)
 
 (defparameter *type-expanders* nil)
+(defparameter *type-docstrings* (make-hash-table :test 'equalp))
+(defmethod documentation (symbol (type (eql 'lisp-binary-type)))
+  (gethash symbol *type-docstrings*))
+
+(defmethod (setf documentation) (new-docstring symbol (doc-type (eql 'lisp-binary-type)))
+  (setf (gethash symbol *type-docstrings*) new-docstring))
+
+(defmethod describe-object :around ((object symbol) stream)
+  (aif (gethash object *type-docstrings*)
+       (progn
+	 (format stream
+		 "~S~%  [Type supported by Lisp-Binary]~%~%Documentation: ~%~a~%~%"
+		 object it)))
+  (call-next-method))
+
+(defun interpret-documentation-form (type-body)
+  (let ((where-clause (if (eq (car type-body) :where)
+			  (list (pop type-body) (pop type-body)))))
+    (if (and (listp (car type-body))
+	     (eq (caar type-body) 'documentation))
+	(let ((docform (pop type-body)))
+	  (loop for docspec in (cdr docform)
+		do (destructuring-bind (type docstring) docspec
+		     (etypecase type
+		       (list (loop for type in type
+				   do (setf (documentation type 'lisp-binary-type)
+					    docstring)))
+		       (symbol
+			 (setf (documentation type 'lisp-binary-type) docstring)))))))
+    (append where-clause type-body)))
+
 (defmacro define-lisp-binary-type (type-info-var lambda-list &body body)
   "Defines a LISP-BINARY type. The TYPE-INFO-VAR will be bound to a DEFBINARY-TYPE
 object that describes the field. The LAMBDA-LIST will be structurally matched against
@@ -1048,11 +1087,13 @@ WITH-SLOTS. These slots are described below:
    BIND-INDEX-TO        - In array reads and writes, may specify a variable to bind the loop index to.
                           Or it can be NIL.
  
-"
-  (let ((args (gensym)))
+"  
+  (setf body (interpret-documentation-form body))
+  (let ((args (gensym "ARGS")))
     `(push (lambda (,type-info-var &rest ,args)
 	     (declare (ignorable ,type-info-var))
 	     (bind-class-slots defbinary-type ,type-info-var
 	       (apply 
 		(destructuring-lambda ,lambda-list ,@body) ,args)))
 	   *type-expanders*)))
+
