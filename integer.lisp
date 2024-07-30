@@ -5,7 +5,7 @@
 	   :signed->unsigned/bits 
 	   :read-integer :write-integer :read-bytes :write-bytes :pop-bits
 	   :split-bit-field :join-field-bits :pop-bits/le
-	   :push-bits :push-bits/le :bit-stream))
+	   :push-bits :push-bits/le :bit-stream :return-subseq))
 
 (in-package :lisp-binary/integer)
 
@@ -135,8 +135,12 @@ to that function should match the one given to this function."))
   (let* ((result (make-array n :element-type element-type))
 	 (bytes-read (read-sequence result stream)))
     (when (< bytes-read n)
-      (cerror "Ignore the error and proceed as if the remaining bytes were zeroes"
-	      (make-condition 'end-of-file :stream stream)))
+      (restart-case
+	  (cerror "Ignore the error and proceed as if the remaining bytes were zeroes"
+		  (make-condition 'end-of-file :stream stream))
+	(return-subseq ()
+	  :report "Return a short array containing only the bytes read"
+	  (setf result (subseq result 0 bytes-read)))))
     (values result bytes-read)))
 
 (defun write-integer (number size stream &key (byte-order :little-endian)
