@@ -394,13 +394,15 @@ STREAM-NAMES."
 
 
 (defmacro defbinary (name (&rest defstruct-options
-				 &key (byte-order :little-endian)
-				 (preserve-*byte-order* t)
-				 align
-				 untyped-struct
-				 include
-				 documentation
-                                 export (byte-count-name (gensym "BYTE-COUNT-")) &allow-other-keys) &body field-descriptions)
+                           &key (byte-order :little-endian)
+                             (preserve-*byte-order* t)
+                             align
+                             untyped-struct
+                             include
+                             documentation
+                             export (byte-count-name (gensym "BYTE-COUNT-"))
+                           &allow-other-keys)
+                     &body direct-field-descriptions)
   "Defines a struct that represents binary data. Also generates two methods for this struct, named
 READ-BINARY and WRITE-BINARY, which (de)serialize the struct to or from a stream. The serialization is
 a direct binary representation of the fields of the struct. For instance, if there's a field with a :TYPE of
@@ -697,156 +699,158 @@ FLOATING-POINT NUMBERS
 
 "
   (setf defstruct-options
-	(remove-plist-keys defstruct-options :export :include :byte-order :byte-count-name :align :untyped-struct :preserve-*byte-order* :documentation))
+	(remove-plist-keys defstruct-options :export :byte-order :byte-count-name :align :untyped-struct :preserve-*byte-order* :documentation))
   (let-values* ((stream-symbol (gensym "STREAM-SYMBOL-"))
-		(*ignore-on-write* nil)
-		(bit-stream-groups (make-hash-table))
-		(previous-defs-symbol (gensym "PREVIOUS-DEFS-SYMBOL-"))
-		(most-recent-byte-count (gensym "MOST-RECENT-BYTE-COUNT-"))
-		(form-value (gensym "FORM-VALUE-"))
-		((field-descriptions bit-stream-required) (convert-to-bit-fields
-                                                            (recursive-field-list field-descriptions
-                                                                                  include)))
-		(fields (loop for f in field-descriptions
-			   collect (apply #'expand-defbinary-field
-					  (append f `(:stream-symbol ,stream-symbol :byte-count-name ,byte-count-name
-										 :previous-defs-symbol ,previous-defs-symbol)
-						  (if (field-option f :byte-order)
-						      nil
-						      `(:byte-order ,(if (eq byte-order :dynamic)
-									 '*byte-order*
-									 byte-order)))))))
-		(name-and-options (if defstruct-options
-				      (cons name
-					(loop for (key value) on (remove-plist-keys defstruct-options :byte-order) by #'cddr
+                (*ignore-on-write* nil)
+                (bit-stream-groups (make-hash-table))
+                (previous-defs-symbol (gensym "PREVIOUS-DEFS-SYMBOL-"))
+                (most-recent-byte-count (gensym "MOST-RECENT-BYTE-COUNT-"))
+                (form-value (gensym "FORM-VALUE-"))
+                ((field-descriptions bit-stream-required) (convert-to-bit-fields (recursive-field-list direct-field-descriptions include)))
+                ((direct-fields fields) (flet ((field-descriptions-fields (field-descriptions)
+                                                 (loop for f in field-descriptions
+                                                       collect (apply #'expand-defbinary-field
+                                                                      (append f `(:stream-symbol ,stream-symbol :byte-count-name ,byte-count-name
+                                                                                  :previous-defs-symbol ,previous-defs-symbol)
+                                                                              (if (field-option f :byte-order)
+                                                                                  nil
+                                                                                  `(:byte-order ,(if (eq byte-order :dynamic)
+                                                                                                     '*byte-order*
+                                                                                                     byte-order))))))))
+                                          (values
+                                           (field-descriptions-fields direct-field-descriptions)
+                                           (field-descriptions-fields field-descriptions))))
+                (name-and-options (if defstruct-options
+                                      (cons name
+                                            (loop for (key value) on (remove-plist-keys defstruct-options :byte-order) by #'cddr
                                                   collect (list key value)))
-				      name))
-		(documentation (if documentation
-				   (list documentation)
-				   nil))
-		(previous-defs nil))    
+                                      name))
+                (documentation (if documentation
+                                   (list documentation)
+                                   nil))
+                (previous-defs nil))    
     (declare (optimize (safety 3)))
     
     (pushover (cons name field-descriptions) *known-defbinary-types*
-	      :key #'car)
+              :key #'car)
     (setf (get name :lisp-binary-fields)
           field-descriptions)
     (loop for f in fields do
-	 (awhen (slot-value f 'bit-stream-id)
-	   (push f (gethash it bit-stream-groups nil))))
+      (awhen (slot-value f 'bit-stream-id)
+        (push f (gethash it bit-stream-groups nil))))
     
     ((lambda (form)
        (if preserve-*byte-order*
-	   form
-	   (remove-binding '*byte-order* form)))
+           form
+           (remove-binding '*byte-order* form)))
      `(progn
-	(defstruct ,name-and-options ,@documentation
-	  ,@(loop for (name default-value . options) in
-		 (mapcar #'binary-field-defstruct-field fields)
-	       for type = (getf options :type)
-	       if (listp name)
-	       append (bitfield-spec->defstruct-specs
-		       name default-value options untyped-struct)
-	       else collect (list* name default-value
-				   :type (if untyped-struct t
-					     type)
-				   (remove-plist-keys options :type :bit-stream-id))))
-	(defmethod read-binary ((type (eql ',name)) ,(if bit-stream-required
-							 `(,stream-symbol bit-stream)
-							 stream-symbol))
-	  ,@(if align
-		`((let* ((current-pos (file-position ,stream-symbol))
-			 (mod (mod current-pos ,align)))
-		    (unless (= mod 0)
-		      (file-position ,stream-symbol
-				     (+ current-pos (- ,align mod)))))))
+        (defstruct ,name-and-options ,@documentation
+                   ,@(loop for (name default-value . options) in
+                                                              (mapcar #'binary-field-defstruct-field direct-fields)
+                           for type = (getf options :type)
+                           if (listp name)
+                             append (bitfield-spec->defstruct-specs
+                                     name default-value options untyped-struct)
+                           else collect (list* name default-value
+                                               :type (if untyped-struct t
+                                                         type)
+                                               (remove-plist-keys options :type :bit-stream-id))))
+        (defmethod read-binary ((type (eql ',name)) ,(if bit-stream-required
+                                                         `(,stream-symbol bit-stream)
+                                                         stream-symbol))
+          ,@(if align
+                `((let* ((current-pos (file-position ,stream-symbol))
+                         (mod (mod current-pos ,align)))
+                    (unless (= mod 0)
+                      (file-position ,stream-symbol
+                                     (+ current-pos (- ,align mod)))))))
 
-	  ,(flet ((make-reader-body (byte-order)
-				    `(let-values* ,(list* `(,byte-count-name 0)
-							  '(*byte-order* *byte-order*)
-							  (add-stream-definitions bit-stream-groups
-										  stream-symbol
-										  byte-order
-										  (loop for f in fields
-										     if (eq (slot-value f 'type) 'null)
-										     collect
-										       `(,(slot-value f 'name) nil)
-										     else collect (make-reader-let-def f)
-										     finally (setf previous-defs nil))))
-				       (values
-					(,(defbinary-constructor-name name defstruct-options)
-					  ,@(loop for name in (mapcar #'binary-field-name fields)
-					       if (symbolp name)
-					       collect (intern (symbol-name name) :keyword)
-					       and collect name
-					       else append (loop for real-name in name
-							      collect (intern (symbol-name real-name) :keyword)
-							      collect real-name)))
-					,byte-count-name))))
-		 (if (eq byte-order :dynamic)
-		     `(ecase *byte-order*
-			(:big-endian ,(make-reader-body :big-endian))
-			(:little-endian ,(make-reader-body :little-endian)))
-		     (make-reader-body byte-order))))
-	
-	(defmethod write-binary ((,name ,name) ,(if bit-stream-required
-						    `(,stream-symbol bit-stream)
-						    stream-symbol))
-	  ,@(if align
-		`((let* ((current-pos (file-position ,stream-symbol))
-			 (mod (mod current-pos ,align)))
-		    (unless (= mod 0)
-		      (loop repeat (- ,align mod) do (write-byte 0 ,stream-symbol))))))
-	    ,(let ((ignore-decls (append *ignore-on-write*
-					 (loop for field in fields
-					    when
-					      (destructuring-case (binary-field-type field)
-						((eval &rest args)
-						 :where (eq eval 'eval)
-						 (declare (ignore args))
-						 t)
-						(otherwise nil))
-					    collect (binary-field-name field))))
-		   (slots (loop for f in (mapcar #'binary-field-name
-						 fields)
-			     if (listp f)
-			     append f
-			     else collect f)))
-		`(let* ,(list `(,byte-count-name 0)
-			      '(*byte-order* *byte-order*))
-		   (with-slots ,slots ,name
-		     ,@(if ignore-decls
-			   `((declare (ignorable ,@ignore-decls))))
-		     ,@(loop for (stream-name . body)
-			  in (group-write-forms (cons stream-symbol
-						      (remove nil (mapcar #'binary-field-bit-stream-id fields)))
-						(loop for processed-write-form in
-						     (loop for write-form in (mapcar #'binary-field-write-form fields)
-							when (recursive-find 'eval write-form)
-							collect (let ((fixed-let-defs (loop for var in slots collect
-											   (CONS VAR (CONS (list 'inject VAR) 'NIL)))))
-								  (subst* `((,previous-defs-symbol ,fixed-let-defs))
-									  write-form))
-							else collect write-form)
-						   collect `(incf ,byte-count-name ,processed-write-form)))
-			  collect `(,@(if (or (null stream-name)
-					      (eq stream-name stream-symbol))
-					  '(progn)
-					  `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
-										     :byte-order ,(if (eq byte-order :dynamic)
-												      '*byte-order*
-												      byte-order))))
-				      ,@body))
-				       
-		     ,byte-count-name))))
-	,@(when export
-		`((export ',name)
-		  (export ',(defbinary-constructor-name name defstruct-options))
-		  ,@(loop for f in (mapcar #'binary-field-name fields)
-		       if (listp f)
-		       append (loop for real-name in f
-				   collect `(export ',real-name))
-		       else collect `(export ',f))))
-	',name))))
+          ,(flet ((make-reader-body (byte-order)
+                    `(let-values* ,(list* `(,byte-count-name 0)
+                                          '(*byte-order* *byte-order*)
+                                          (add-stream-definitions bit-stream-groups
+                                                                  stream-symbol
+                                                                  byte-order
+                                                                  (loop for f in fields
+                                                                        if (eq (slot-value f 'type) 'null)
+                                                                          collect
+                                                                        `(,(slot-value f 'name) nil)
+                                                                        else collect (make-reader-let-def f)
+                                                                        finally (setf previous-defs nil))))
+                       (values
+                        (,(defbinary-constructor-name name defstruct-options)
+                         ,@(loop for name in (mapcar #'binary-field-name fields)
+                                 if (symbolp name)
+                                   collect (intern (symbol-name name) :keyword)
+                                   and collect name
+                                 else append (loop for real-name in name
+                                                   collect (intern (symbol-name real-name) :keyword)
+                                                   collect real-name)))
+                        ,byte-count-name))))
+             (if (eq byte-order :dynamic)
+                 `(ecase *byte-order*
+                    (:big-endian ,(make-reader-body :big-endian))
+                    (:little-endian ,(make-reader-body :little-endian)))
+                 (make-reader-body byte-order))))
+        
+        (defmethod write-binary ((,name ,name) ,(if bit-stream-required
+                                                    `(,stream-symbol bit-stream)
+                                                    stream-symbol))
+          ,@(if align
+                `((let* ((current-pos (file-position ,stream-symbol))
+                         (mod (mod current-pos ,align)))
+                    (unless (= mod 0)
+                      (loop repeat (- ,align mod) do (write-byte 0 ,stream-symbol))))))
+          ,(let ((ignore-decls (append *ignore-on-write*
+                                       (loop for field in fields
+                                             when
+                                             (destructuring-case (binary-field-type field)
+                                               ((eval &rest args)
+                                                :where (eq eval 'eval)
+                                                (declare (ignore args))
+                                                t)
+                                               (otherwise nil))
+                                             collect (binary-field-name field))))
+                 (slots (loop for f in (mapcar #'binary-field-name
+                                               fields)
+                              if (listp f)
+                                append f
+                              else collect f)))
+             `(let* ,(list `(,byte-count-name 0)
+                           '(*byte-order* *byte-order*))
+                (with-slots ,slots ,name
+                  ,@(if ignore-decls
+                        `((declare (ignorable ,@ignore-decls))))
+                  ,@(loop for (stream-name . body)
+                            in (group-write-forms (cons stream-symbol
+                                                        (remove nil (mapcar #'binary-field-bit-stream-id fields)))
+                                                  (loop for processed-write-form in
+                                                                                 (loop for write-form in (mapcar #'binary-field-write-form fields)
+                                                                                       when (recursive-find 'eval write-form)
+                                                                                         collect (let ((fixed-let-defs (loop for var in slots collect
+                                                                                                                                              (CONS VAR (CONS (list 'inject VAR) 'NIL)))))
+                                                                                                   (subst* `((,previous-defs-symbol ,fixed-let-defs))
+                                                                                                           write-form))
+                                                                                       else collect write-form)
+                                                        collect `(incf ,byte-count-name ,processed-write-form)))
+                          collect `(,@(if (or (null stream-name)
+                                              (eq stream-name stream-symbol))
+                                          '(progn)
+                                          `(with-wrapped-in-bit-stream (,stream-name ,stream-symbol
+                                                                        :byte-order ,(if (eq byte-order :dynamic)
+                                                                                         '*byte-order*
+                                                                                         byte-order))))
+                                    ,@body))
+                  
+                  ,byte-count-name))))
+        ,@(when export
+            `((export ',name)
+              (export ',(defbinary-constructor-name name defstruct-options))
+              ,@(loop for f in (mapcar #'binary-field-name fields)
+                      if (listp f)
+                        append (loop for real-name in f
+                                     collect `(export ',real-name))
+                      else collect `(export ',f))))
+        ',name))))
 
 
