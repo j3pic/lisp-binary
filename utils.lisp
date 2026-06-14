@@ -13,8 +13,7 @@
 (defun divisiblep (num denom)
   (= (mod num denom) 0))
 
-(defmacro simple-define-condition (name parent-classes slots &optional docstring)
-  (setf (documentation name 'type) docstring)
+(defmacro simple-define-condition (name parent-classes slots)
   `(define-condition ,name ,parent-classes
                      ,(loop for slot-name in slots
                         collect (if (listp slot-name)
