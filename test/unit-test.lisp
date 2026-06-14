@@ -26,7 +26,8 @@
 (defmacro unit-test (name &body body)
   `(progn (set-assoc ,name *unit-tests*
 		(lambda ()
-		  (handler-bind ((condition
+		  (handler-bind (((and condition
+				       #+sbcl (not sb-ext:compiler-note))
 				  (lambda (exn)
 				    (declare (ignorable exn))
 				    (aif (find-restart 'fail-test)
