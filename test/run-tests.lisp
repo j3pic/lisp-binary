@@ -6,7 +6,7 @@
 (push '*default-pathname-defaults* asdf:*central-registry*)
 
 (defmacro warnings-to-errors (&body body)
-  `(handler-bind (((and warning
+  `(handler-bind (((and warning (not style-warning)
 			#-ccl (not asdf/parse-defsystem::bad-system-name))
 		   (lambda (exn) (error exn))))
      ,@body))

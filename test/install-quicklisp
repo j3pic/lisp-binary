@@ -17,10 +17,20 @@ echo '>>>>>>>>>>>>>> INSTALLING QUICKLISP'
 
 (yes '' || true) | $LISP setup-test-environment.lisp
 
+mkdir -p $HOME/quicklisp/local-projects
+
 ( cd ..
   dir=`pwd`
   cd ..
+  echo ">>>>>>>>>>>>>>> INSTALLING $dir in $HOME/quicklisp/local-projects"
   cp -fdR $dir $HOME/quicklisp/local-projects
 )
+
+if [ -e $HOME/quicklisp/local-projects/lisp-binary/lisp-binary.asd ]; then
+  echo ">>>>>>>>>>>> Lisp-Binary successfully installed in Quicklisp"
+else
+  echo ">>>>>>>>>>> Failed to install Lisp-Binary in $HOME/quicklisp/local-projects/lisp-binary/"
+  exit 1
+fi
 
 echo -n $HOME/quicklisp/local-projects/lisp-binary/ > local-projects-dir.txt

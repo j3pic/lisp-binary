@@ -22,14 +22,19 @@
        finally (return (values gold dirt))))
 
 (defparameter *unit-tests* nil)
+(defvar *debug-test* nil)
 
 (defmacro unit-test (name &body body)
   `(progn (set-assoc ,name *unit-tests*
 		(lambda ()
-		  (handler-bind (((and condition
+		  (handler-bind (((and condition (not cl:style-warning)
 				       #+sbcl (not sb-ext:compiler-note))
 				  (lambda (exn)
 				    (declare (ignorable exn))
+				    (if *debug-test*
+					(restart-case
+					    (error exn)
+					  (resume () t)))
 				    (aif (find-restart 'fail-test)
 					 (invoke-restart it)))))
 		    (compile ,name (list 'lambda nil

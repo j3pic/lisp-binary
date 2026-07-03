@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+CONTEXT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+IMAGE="lisp-binary-test"
+DOCKERFILE="$SCRIPT_DIR/Dockerfile"
+
+# Build the Docker image if it doesn't exist
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  docker build -f "$DOCKERFILE" -t "$IMAGE" "$CONTEXT_DIR"
+fi
+
+docker run -v "$CONTEXT_DIR":/lisp-binary "$IMAGE" bash -lc '
+  set -e
+  apt-get update >/dev/null
+  apt-get install -y --no-install-recommends procps >/dev/null
+  cd /lisp-binary/test
+  export base_dir=$(pwd)
+  cat >/tmp/sbcl-nocffi.sh <<\EOF
+#!/bin/sh
+if [ "$#" -eq 0 ]; then
+  exec sbcl \
+    --no-userinit --no-sysinit --disable-debugger \
+    --eval "(push :lisp-binary/no-cffi *features*)" \
+    --quit
+else
+  exec sbcl \
+    --no-userinit --no-sysinit --disable-debugger \
+    --eval "(push :lisp-binary/no-cffi *features*)" \
+    --load "$1" --quit
+fi
+EOF
+  cat /tmp/sbcl-nocffi.sh
+  chmod +x /tmp/sbcl-nocffi.sh
+  ./test-on-implementation /tmp/sbcl-nocffi.sh .sbclrc
+  # ./test-on-implementation "clisp -ansi -q -on-error exit" .clisprc.lisp
+'

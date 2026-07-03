@@ -2,15 +2,27 @@
 
 set -x -e -o pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+BASE_DIR=${base_dir:-$SCRIPT_DIR}
+
 LISP="$1"
 INIT=$HOME/"$2"
 
-$base_dir/install-quicklisp "$LISP"
+cleanup() {
+  rm -rf ~/quicklisp
+  rm -f init.lisp
+  rm -f "$SCRIPT_DIR/local-projects-dir.txt"
+  rm -f "$SCRIPT_DIR"/quicklisp.lisp "$SCRIPT_DIR"/quicklisp.lisp.*
+  rm -f quicklisp.lisp quicklisp.lisp.*
+}
+trap cleanup EXIT
 
-cp $INIT init.lisp
+"$BASE_DIR"/install-quicklisp "$LISP"
+
+if [ -f "$INIT" ]; then
+  cp "$INIT" init.lisp
+else
+  echo "(load #p\"$HOME/quicklisp/setup.lisp\")" > init.lisp
+fi
 echo '>>>>>>>>>>>>>> RUNNING TEST'
 (yes '' || true) | $LISP run-tests.lisp
-
-rm -rf ~/quicklisp
-rm -f init.lisp
-rm -rf quicklisp.lisp
