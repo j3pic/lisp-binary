@@ -49,6 +49,18 @@
 		    (funcall ,name)
 		    t)))))
 
+(defun call-with-retry (thunk)
+  (loop do
+    (restart-case
+	(return-from call-with-retry
+	  (funcall thunk))
+      (retry ()
+	:report "Run the test again."
+	nil))))
+
+(defmacro with-retry (&body body)
+  `(call-with-retry (lambda () ,@body)))
+
 (defun do-tests ()
   (sift (lambda (result)
 	  (eq (second result) :fail))
@@ -56,7 +68,7 @@
 		  (format t "~%>>>>> ~a~%" (first test))
 		  (list (first test)
 			(restart-case
-			    (progn
+			    (with-retry
 			      (funcall (cdr test))
 			      :pass)
 			  (fail-test () :fail)))) *unit-tests*)))
